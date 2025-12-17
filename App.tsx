@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { peerService } from './services/peerService';
-import { Player, GameState, NetworkMessage, MessageType } from './types';
+import { peerService } from './services/peerService.ts';
+import { Player, GameState, NetworkMessage, MessageType } from './types.ts';
 import { 
   Users, 
   Copy, 
@@ -79,7 +79,7 @@ const App: React.FC = () => {
 
   const analyzeSessionWithAI = async (playersCount: number) => {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const envInfo = onVercel ? "deployed on Vercel edge network" : "running on local node";
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -93,15 +93,20 @@ const App: React.FC = () => {
 
   const handleInitialize = async () => {
     if (!nickname.trim()) return;
-    const id = await peerService.init(nickname);
-    setGameState(prev => ({ 
-      ...prev, 
-      status: 'idle', 
-      roomId: id,
-      players: [{ id, nickname, isHost: true, joinedAt: Date.now() }] 
-    }));
-    setIsReady(true);
-    addLog(`Initialized as ${nickname} on ${onVercel ? 'Vercel' : 'Local Host'}`);
+    try {
+        const id = await peerService.init(nickname);
+        setGameState(prev => ({ 
+          ...prev, 
+          status: 'idle', 
+          roomId: id,
+          players: [{ id, nickname, isHost: true, joinedAt: Date.now() }] 
+        }));
+        setIsReady(true);
+        addLog(`Initialized as ${nickname} on ${onVercel ? 'Vercel' : 'Local Host'}`);
+    } catch (err) {
+        console.error("Initialization failed:", err);
+        addLog("Initialization error. Check console.");
+    }
   };
 
   const handleHost = () => {
@@ -483,7 +488,7 @@ const App: React.FC = () => {
 
       <footer className="py-4 px-8 border-t border-slate-900 bg-slate-950 text-center">
         <p className="text-[10px] text-slate-600 font-mono tracking-widest uppercase">
-          &copy; 2024 Multiplayer Nexus // {onVercel ? 'VERCEL EDGE PROTOCOL' : 'LOCAL HUB'} // Version 1.0.5-Alpha
+          &copy; 2024 Multiplayer Nexus // {onVercel ? 'VERCEL EDGE PROTOCOL' : 'LOCAL HUB'} // Version 1.0.6-Alpha
         </p>
       </footer>
     </div>
