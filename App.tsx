@@ -12,12 +12,19 @@ import {
   ShieldAlert,
   Wifi,
   Terminal,
-  MessageSquare
+  MessageSquare,
+  Zap,
+  Globe
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
+// Deployment Detection Utility
+const isVercel = () => {
+  return window.location.hostname.includes('vercel.app');
+};
+
 // Components
-const Header = () => (
+const Header = ({ isVercelHost }: { isVercelHost: boolean }) => (
   <header className="py-6 px-8 flex justify-between items-center border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
     <div className="flex items-center gap-3">
       <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center neon-glow">
@@ -28,9 +35,19 @@ const Header = () => (
         <p className="text-xs text-slate-400 font-medium">REAL-TIME CONNECTIVITY TEST</p>
       </div>
     </div>
-    <div className="flex items-center gap-2">
-      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-      <span className="text-xs font-mono text-slate-300 uppercase">System Ready</span>
+    <div className="flex items-center gap-4">
+      {isVercelHost && (
+        <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-black rounded-full border border-white/10 group cursor-help transition-all hover:border-white/30">
+          <svg width="12" height="12" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="white"/>
+          </svg>
+          <span className="text-[10px] font-bold tracking-tighter text-white">VERCEL DEPLOYED</span>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+        <span className="text-xs font-mono text-slate-300 uppercase">System Ready</span>
+      </div>
     </div>
   </header>
 );
@@ -48,8 +65,13 @@ const App: React.FC = () => {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
+  const [onVercel, setOnVercel] = useState(false);
   
   const pingTimers = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    setOnVercel(isVercel());
+  }, []);
 
   const addLog = (msg: string) => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10));
@@ -58,9 +80,10 @@ const App: React.FC = () => {
   const analyzeSessionWithAI = async (playersCount: number) => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const envInfo = onVercel ? "deployed on Vercel edge network" : "running on local node";
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Analyze this multiplayer test session: ${playersCount} players connected. Nickname: ${nickname}. Provide a very short, cool, tech-oriented welcome or status report (2 sentences max).`,
+        contents: `Analyze this multiplayer test session: ${playersCount} players connected. Nickname: ${nickname}. Environment: ${envInfo}. Provide a very short, cool, tech-oriented welcome or status report mentioning the deployment environment (2 sentences max).`,
       });
       setAiAnalysis(response.text || 'Connection optimized.');
     } catch (e) {
@@ -78,7 +101,7 @@ const App: React.FC = () => {
       players: [{ id, nickname, isHost: true, joinedAt: Date.now() }] 
     }));
     setIsReady(true);
-    addLog(`Initialized as ${nickname}`);
+    addLog(`Initialized as ${nickname} on ${onVercel ? 'Vercel' : 'Local Host'}`);
   };
 
   const handleHost = () => {
@@ -148,7 +171,6 @@ const App: React.FC = () => {
           if (prev.players.find(p => p.id === newPlayer.id)) return prev;
           const nextPlayers = [...prev.players, newPlayer];
           
-          // If we are host, broadcast the updated list to everyone
           if (prev.status === 'hosting') {
              peerService.broadcast({
                type: 'SYNC_PLAYERS',
@@ -163,7 +185,7 @@ const App: React.FC = () => {
         });
         break;
     }
-  }, [gameState.status, nickname]);
+  }, [gameState.status, nickname, onVercel]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -171,14 +193,12 @@ const App: React.FC = () => {
     peerService.onMessage(handleMessage);
 
     peerService.onConnection((id) => {
-      // If we joined someone, send our info
       peerService.sendTo(id, {
         type: 'PLAYER_JOINED',
         payload: { id: peerService.getPeerId()!, nickname, isHost: false, joinedAt: Date.now() },
         senderId: peerService.getPeerId()!,
         senderNickname: nickname
       });
-      // Start pinging
       const interval = setInterval(() => sendPing(id), 5000);
       return () => clearInterval(interval);
     });
@@ -224,10 +244,15 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-950">
         <div className="w-full max-w-md glass p-8 rounded-3xl neon-glow border-indigo-500/20">
-          <div className="flex justify-center mb-8">
+          <div className="flex justify-center mb-8 relative">
             <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center neon-glow">
               <Users className="text-white w-8 h-8" />
             </div>
+            {onVercel && (
+               <div className="absolute -top-2 -right-2 bg-black border border-white/20 px-2 py-0.5 rounded text-[8px] font-black text-white flex items-center gap-1">
+                 <Zap className="w-2 h-2 fill-white" /> VERCEL
+               </div>
+            )}
           </div>
           <h2 className="text-3xl font-bold text-center mb-2">Identify Yourself</h2>
           <p className="text-slate-400 text-center mb-8">Enter your alias to initialize the nexus node.</p>
@@ -259,17 +284,29 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950">
-      <Header />
+      <Header isVercelHost={onVercel} />
       
       <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto w-full">
         
-        {/* Left Panel: Server Controls */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <div className="glass p-6 rounded-2xl border-slate-800">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-indigo-400" />
-              Node Status
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-indigo-400" />
+                Node Status
+              </h3>
+              {onVercel ? (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md">
+                   <Globe className="w-3 h-3 text-indigo-300" />
+                   <span className="text-[10px] font-mono text-indigo-200">VERCEL_EDGE</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-md">
+                   <Zap className="w-3 h-3 text-slate-400" />
+                   <span className="text-[10px] font-mono text-slate-400">LOCAL_NODE</span>
+                </div>
+              )}
+            </div>
             
             <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 mb-6">
               <div className="flex justify-between items-start mb-2">
@@ -350,10 +387,8 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Center Panel: Player List & AI Analysis */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Player List */}
             <div className="glass p-6 rounded-2xl border-slate-800 h-full min-h-[400px] flex flex-col">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -393,7 +428,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* AI Analysis & Chat */}
             <div className="flex flex-col gap-6">
               <div className="glass p-5 rounded-2xl border-slate-800 bg-indigo-600/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -449,7 +483,7 @@ const App: React.FC = () => {
 
       <footer className="py-4 px-8 border-t border-slate-900 bg-slate-950 text-center">
         <p className="text-[10px] text-slate-600 font-mono tracking-widest uppercase">
-          &copy; 2024 Multiplayer Nexus // Encrypted P2P Data Protocol // Version 1.0.4-Alpha
+          &copy; 2024 Multiplayer Nexus // {onVercel ? 'VERCEL EDGE PROTOCOL' : 'LOCAL HUB'} // Version 1.0.5-Alpha
         </p>
       </footer>
     </div>
