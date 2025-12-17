@@ -83,17 +83,18 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 10px; }
         
         .message-bubble {
-            max-width: 85%;
-            min-width: 80px;
+            max-width: 80%;
+            min-width: 100px;
             width: fit-content;
             border: 1px solid var(--border);
             animation: slideIn 0.2s cubic-bezier(0, 0, 0.2, 1);
             word-wrap: break-word;
             word-break: break-word;
             overflow-wrap: break-word;
-            display: flex;
-            flex-direction: column;
-            padding: 0.75rem 1rem !important;
+            display: block;
+            position: relative;
+            padding: 12px 16px !important;
+            margin-bottom: 4px;
         }
 
         @keyframes slideIn {
@@ -146,18 +147,5 @@
     <canvas id="three-canvas"></canvas>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          try {
-            navigator.serviceWorker.register('sw.js', { scope: './' }).catch(err => {
-              console.log('SW registration suppressed');
-            });
-          } catch(e) {
-            console.log('SW setup error');
-          }
-        });
-      }
-    </script>
 </body>
 </html>

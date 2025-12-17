@@ -14,7 +14,6 @@ class PeerService {
     return new Promise((resolve, reject) => {
       const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       
-      // Cleanup existing peer if re-initializing
       if (this.peer) {
         this.peer.destroy();
       }
@@ -33,17 +32,15 @@ class PeerService {
       });
 
       this.peer.on('open', (id) => {
-        console.log('Peer opened with ID:', id);
+        console.log('Peer opened:', id);
         resolve(id);
       });
 
       this.peer.on('connection', (conn) => {
-        console.log('Incoming connection from:', conn.peer);
         this.setupConnection(conn);
       });
 
       this.peer.on('call', (call) => {
-        console.log('Incoming call from:', call.peer);
         if (this.onCallCallback) this.onCallCallback(call);
       });
 
@@ -54,7 +51,6 @@ class PeerService {
       });
 
       this.peer.on('disconnected', () => {
-        console.log('Peer disconnected, attempting to reconnect...');
         this.peer?.reconnect();
       });
     });
@@ -76,34 +72,23 @@ class PeerService {
     });
 
     conn.on('error', (err) => {
-      console.error('Connection error with', conn.peer, ':', err);
+      console.error('Conn error:', err);
+      this.connections.delete(conn.peer);
     });
   }
 
   connectToPeer(targetId: string) {
     if (!this.peer || this.peer.destroyed) return;
-    const sanitizedTarget = targetId.toUpperCase();
-    
-    // Check if already connected
-    if (this.connections.has(sanitizedTarget)) {
-        const existing = this.connections.get(sanitizedTarget);
-        if (existing?.open) return;
-    }
+    const target = targetId.toUpperCase();
+    if (this.connections.get(target)?.open) return;
 
-    const conn = this.peer.connect(sanitizedTarget, {
-      reliable: true
-    });
+    const conn = this.peer.connect(target, { reliable: true });
     this.setupConnection(conn);
   }
 
   callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
     if (!this.peer || this.peer.destroyed) return null;
-    return this.peer.call(targetId.toUpperCase(), stream, {
-      metadata: { 
-        nickname: localStorage.getItem('mm_nick'),
-        avatar: localStorage.getItem('mm_avatar')
-      }
-    });
+    return this.peer.call(targetId.toUpperCase(), stream);
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
@@ -113,20 +98,14 @@ class PeerService {
     if (conn && conn.open) {
       conn.send(message);
     } else {
-      console.log('Connection not ready, attempting to connect to', target);
       this.connectToPeer(target);
-      
-      // Wait a bit and try sending again
-      const checkAndSend = (retries: number) => {
-          if (retries <= 0) return;
-          const retryConn = this.connections.get(target);
-          if (retryConn && retryConn.open) {
-              retryConn.send(message);
-          } else {
-              setTimeout(() => checkAndSend(retries - 1), 1000);
-          }
+      const retry = (count: number) => {
+          if (count <= 0) return;
+          const c = this.connections.get(target);
+          if (c && c.open) c.send(message);
+          else setTimeout(() => retry(count - 1), 1000);
       };
-      checkAndSend(5);
+      retry(5);
     }
   }
 
