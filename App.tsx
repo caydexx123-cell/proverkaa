@@ -3,19 +3,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { peerService } from './services/peerService.ts';
 import { NetworkMessage, ChatMessage, PlayerProfile, AppSettings } from './types.ts';
 import { 
-  Search, Menu, Paperclip, 
-  CheckCheck, LogOut, X, Phone, Video,
-  Camera, Sun, Moon, 
-  Mic, MicOff, Video as VideoIcon, VideoOff, 
-  Play, Pause, Lock, ChevronLeft, User, ShieldCheck, Loader2, Trash2,
-  Palette, UserPlus, Users, RefreshCw, Volume2
+  Menu, Paperclip, 
+  CheckCheck, LogOut, X, Phone, Video as VideoIcon, 
+  Mic, MicOff, Play, Pause, Lock, ChevronLeft, User, Loader2,
+  Palette, RefreshCw, Volume2
 } from 'lucide-react';
-
-interface Account {
-  nickname: string;
-  password: string;
-  avatar?: string;
-}
 
 const SettingsSection: React.FC<{ title: string, icon: any, children: React.ReactNode }> = ({ title, icon: Icon, children }) => (
   <div className="space-y-4">
@@ -61,28 +53,22 @@ const VoiceMessagePlayer: React.FC<{ url: string, isMe: boolean }> = ({ url, isM
 };
 
 const App: React.FC = () => {
-  // --- Состояния аккаунтов ---
-  const [accounts, setAccounts] = useState<Account[]>(() => {
-    const saved = localStorage.getItem('mm_accounts');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [currentAccountIndex, setCurrentAccountIndex] = useState<number | null>(() => {
-    const saved = localStorage.getItem('mm_cur_acc');
-    return saved !== null ? parseInt(saved) : null;
+  // --- Состояние текущего пользователя ---
+  const [currentUser, setCurrentUser] = useState<{nickname: string, avatar?: string} | null>(() => {
+    const saved = localStorage.getItem('mm_current_user');
+    return saved ? JSON.parse(saved) : null;
   });
 
-  const activeAccount = currentAccountIndex !== null ? accounts[currentAccountIndex] : null;
-
-  // --- Состояния авторизации ---
+  // --- Состояния авторизации (ввод данных) ---
   const [authNickname, setAuthNickname] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [tempAvatar, setTempAvatar] = useState<string | undefined>();
   
   // --- Состояния UI ---
-  const [regStep, setRegStep] = useState(() => (currentAccountIndex !== null ? 3 : 1));
+  const [regStep, setRegStep] = useState(() => (currentUser ? 3 : 1));
   const [isReady, setIsReady] = useState(false);
-  const [isAuthed, setIsAuthed] = useState(() => currentAccountIndex !== null);
+  const [isAuthed, setIsAuthed] = useState(() => !!currentUser);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('mm_theme') as any) || 'light');
   
@@ -120,57 +106,55 @@ const App: React.FC = () => {
     localStorage.setItem('mm_theme', theme);
   }, [theme]);
 
+  // Сохранение сессии
   useEffect(() => {
-    const cleanup = () => peerService.destroy();
-    window.addEventListener('beforeunload', cleanup);
-    return () => window.removeEventListener('beforeunload', cleanup);
-  }, []);
+    if (currentUser) {
+      localStorage.setItem('mm_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('mm_current_user');
+    }
+  }, [currentUser]);
 
+  // Загрузка данных пользователя при входе
   useEffect(() => {
-    if (activeAccount) {
-      const savedConvs = localStorage.getItem(`mm_convs_${activeAccount.nickname}`);
-      const savedContacts = localStorage.getItem(`mm_contacts_${activeAccount.nickname}`);
-      const savedProfs = localStorage.getItem(`mm_profiles_${activeAccount.nickname}`);
+    if (currentUser) {
+      const nick = currentUser.nickname;
+      const savedConvs = localStorage.getItem(`mm_convs_${nick}`);
+      const savedContacts = localStorage.getItem(`mm_contacts_${nick}`);
+      const savedProfs = localStorage.getItem(`mm_profiles_${nick}`);
       setConversations(savedConvs ? JSON.parse(savedConvs) : {});
       setContacts(savedContacts ? JSON.parse(savedContacts) : []);
       setProfiles(savedProfs ? JSON.parse(savedProfs) : {});
     }
-  }, [currentAccountIndex, activeAccount?.nickname]);
+  }, [currentUser]);
 
+  // Сохранение данных пользователя
   useEffect(() => {
-    localStorage.setItem('mm_accounts', JSON.stringify(accounts));
-    if (currentAccountIndex !== null) localStorage.setItem('mm_cur_acc', currentAccountIndex.toString());
-    else localStorage.removeItem('mm_cur_acc');
-  }, [accounts, currentAccountIndex]);
-
-  useEffect(() => {
-    if (activeAccount && isAuthed) {
-        localStorage.setItem(`mm_convs_${activeAccount.nickname}`, JSON.stringify(conversations));
-        localStorage.setItem(`mm_contacts_${activeAccount.nickname}`, JSON.stringify(contacts));
-        localStorage.setItem(`mm_profiles_${activeAccount.nickname}`, JSON.stringify(profiles));
+    if (currentUser && isAuthed) {
+        const nick = currentUser.nickname;
+        localStorage.setItem(`mm_convs_${nick}`, JSON.stringify(conversations));
+        localStorage.setItem(`mm_contacts_${nick}`, JSON.stringify(contacts));
+        localStorage.setItem(`mm_profiles_${nick}`, JSON.stringify(profiles));
     }
-  }, [conversations, contacts, profiles, activeAccount, isAuthed]);
+  }, [conversations, contacts, profiles, currentUser, isAuthed]);
 
-  // Загрузка устройств
   useEffect(() => {
     if (isMenuOpen) {
       navigator.mediaDevices.enumerateDevices().then(setDevices);
     }
   }, [isMenuOpen]);
 
-  // --- Функции управления ---
   const handleInitialize = useCallback(async () => {
-    if (!activeAccount) return;
+    if (!currentUser) return;
     setIsReady(false);
     setSearchError(null);
     try {
-      await peerService.init(activeAccount.nickname);
+      await peerService.init(currentUser.nickname);
       setIsReady(true);
     } catch (err: any) { 
-      console.error("[App] Initialization failed:", err);
       setSearchError(err.message || "Ошибка связи");
     }
-  }, [activeAccount]);
+  }, [currentUser]);
 
   useEffect(() => {
     if (isAuthed && regStep === 3 && !isReady) handleInitialize();
@@ -179,72 +163,31 @@ const App: React.FC = () => {
   const handleAuthSubmit = () => {
     const nick = authNickname.trim().toUpperCase();
     const pass = authPassword.trim();
-    if (!nick || !pass) return;
-
-    if (isRegistering) {
-      if (accounts.length >= 3) {
-        setSearchError("Максимум 3 аккаунта! Удалите старый.");
+    if (!nick || !pass) {
+        setSearchError("Введите ник и пароль");
         return;
-      }
-      if (accounts.some(a => a.nickname === nick)) {
-        setSearchError("Этот ник уже сохранен. Используйте Вход.");
-        return;
-      }
-      const newAcc = { nickname: nick, password: pass, avatar: tempAvatar };
-      const newAccounts = [...accounts, newAcc];
-      setAccounts(newAccounts);
-      setCurrentAccountIndex(newAccounts.length - 1);
-      setRegStep(3);
-      setIsAuthed(true);
-    } else {
-      const idx = accounts.findIndex(a => a.nickname === nick && a.password === pass);
-      if (idx !== -1) {
-        setCurrentAccountIndex(idx);
-        setRegStep(3);
-        setIsAuthed(true);
-      } else {
-        setSearchError("Аккаунт не найден или неверный пароль");
-      }
     }
-  };
 
-  const switchAccount = (idx: number) => {
-    if (idx === currentAccountIndex) return;
-    console.log("[App] Switching to account:", accounts[idx].nickname);
-    peerService.destroy();
-    setIsReady(false);
-    setIsMenuOpen(false);
-    setActiveChatId(null);
-    setSearchError(null);
-    setConversations({});
-    setContacts([]);
-    setProfiles({});
-    setCurrentAccountIndex(idx);
+    // В P2P приложении без бэкенда авторизация упрощена
+    const user = { nickname: nick, avatar: tempAvatar };
+    setCurrentUser(user);
     setRegStep(3);
     setIsAuthed(true);
   };
 
   const logoutAndClear = () => {
     peerService.destroy();
-    localStorage.removeItem('mm_cur_acc');
-    setCurrentAccountIndex(null);
+    setCurrentUser(null);
     setIsAuthed(false);
     setIsReady(false);
     setRegStep(1);
     setSearchError(null);
     setAuthNickname('');
     setAuthPassword('');
-  };
-
-  const deleteAccount = (idx: number) => {
-    const acc = accounts[idx];
-    localStorage.removeItem(`mm_convs_${acc.nickname}`);
-    localStorage.removeItem(`mm_contacts_${acc.nickname}`);
-    localStorage.removeItem(`mm_profiles_${acc.nickname}`);
-    const newAccounts = accounts.filter((_, i) => i !== idx);
-    setAccounts(newAccounts);
-    if (currentAccountIndex === idx) logoutAndClear();
-    else if (currentAccountIndex !== null && currentAccountIndex > idx) setCurrentAccountIndex(currentAccountIndex - 1);
+    setConversations({});
+    setContacts([]);
+    setProfiles({});
+    setActiveChatId(null);
   };
 
   const handleMessage = useCallback((msg: NetworkMessage) => {
@@ -270,14 +213,14 @@ const App: React.FC = () => {
     if (!isReady) return;
     peerService.onMessage(handleMessage);
     peerService.onConnection(id => {
-        if (activeAccount) {
-            peerService.sendTo(id, { type: 'SYNC_PROFILE', payload: { avatar: activeAccount.avatar || '' }, senderId: peerService.getPeerId()!, senderNickname: activeAccount.nickname });
+        if (currentUser) {
+            peerService.sendTo(id, { type: 'SYNC_PROFILE', payload: { avatar: currentUser.avatar || '' }, senderId: peerService.getPeerId()!, senderNickname: currentUser.nickname });
         }
         setProfiles(prev => ({ ...prev, [id]: { ...prev[id], online: true } }));
     });
     peerService.onDisconnect(id => setProfiles(prev => ({ ...prev, [id]: { ...prev[id], online: false } })));
     peerService.onCall(call => setIncomingCall(call));
-  }, [isReady, handleMessage, activeAccount]);
+  }, [isReady, handleMessage, currentUser]);
 
   const handleSearch = () => {
     const id = searchQuery.trim().toUpperCase();
@@ -291,11 +234,11 @@ const App: React.FC = () => {
   };
 
   const sendMessage = (type: any, payload: any) => {
-    if (!activeChatId || !activeAccount) return;
+    if (!activeChatId || !currentUser) return;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const messageId = Math.random().toString();
-    peerService.sendTo(activeChatId, { type, payload, senderId: peerService.getPeerId()!, senderNickname: activeAccount.nickname, messageId });
-    const localMsg: ChatMessage = { id: messageId, senderId: peerService.getPeerId()!, senderName: activeAccount.nickname, time, isMe: true, type };
+    peerService.sendTo(activeChatId, { type, payload, senderId: peerService.getPeerId()!, senderNickname: currentUser.nickname, messageId });
+    const localMsg: ChatMessage = { id: messageId, senderId: peerService.getPeerId()!, senderName: currentUser.nickname, time, isMe: true, type };
     if (type === 'CHAT') localMsg.text = payload;
     if (type === 'IMAGE') localMsg.imageUrl = payload;
     if (type === 'VOICE') localMsg.voiceUrl = payload;
@@ -319,7 +262,6 @@ const App: React.FC = () => {
       recorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
-      timerRef.current = window.setInterval(() => {}, 1000);
     } catch (err) { alert("Микрофон недоступен"); }
   };
 
@@ -327,7 +269,6 @@ const App: React.FC = () => {
     if (recorderRef.current && isRecording) {
       recorderRef.current.stop();
       setIsRecording(false);
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
   };
 
@@ -358,7 +299,7 @@ const App: React.FC = () => {
         call.on('stream', (rStream) => setRemoteStream(rStream));
         call.on('close', endCall);
       }
-    } catch (err) { alert("Не удалось начать звонок: " + err); }
+    } catch (err) { alert("Не удалось начать звонок"); }
   };
 
   const answerCall = async () => {
@@ -374,7 +315,7 @@ const App: React.FC = () => {
     } catch (err) { alert("Не удалось ответить"); }
   };
 
-  // --- Рендеринг ---
+  // --- Рендеринг входа ---
   if (!isAuthed || !isReady) return (
     <div className="h-screen w-full flex items-center justify-center p-6 bg-white dark:bg-black">
       <div className="w-full max-w-sm glass p-10 rounded-[3rem] text-center shadow-2xl animate-in fade-in zoom-in duration-500">
@@ -394,23 +335,14 @@ const App: React.FC = () => {
             }} />
             <input type="text" placeholder="НИКНЕЙМ" className="w-full p-5 bg-slate-50 dark:bg-zinc-900 rounded-2xl font-bold uppercase" value={authNickname} onChange={e => setAuthNickname(e.target.value)} />
             <input type="password" placeholder="ПАРОЛЬ" className="w-full p-5 bg-slate-50 dark:bg-zinc-900 rounded-2xl font-bold" value={authPassword} onChange={e => setAuthPassword(e.target.value)} onKeyDown={e => e.key==='Enter' && handleAuthSubmit()} />
-            {searchError && <p className="text-red-500 text-[10px] font-black uppercase animate-pulse leading-tight">{searchError}</p>}
+            {searchError && <p className="text-red-500 text-[10px] font-black uppercase animate-pulse">{searchError}</p>}
             <button onClick={handleAuthSubmit} className="w-full p-5 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">
                 {isRegistering ? 'Создать MARTAM' : 'Войти'}
             </button>
-            <div className="pt-4 flex flex-col gap-4">
+            <div className="pt-4">
                 <button onClick={() => { setIsRegistering(!isRegistering); setSearchError(null); }} className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
                     {isRegistering ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Регистрация'}
                 </button>
-                {accounts.length > 0 && !isRegistering && (
-                    <div className="flex flex-wrap justify-center gap-2 mt-2">
-                        {accounts.map((acc, i) => (
-                            <button key={i} onClick={() => switchAccount(i)} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-zinc-800 overflow-hidden border border-border">
-                                {acc.avatar ? <img src={acc.avatar} className="w-full h-full object-cover" /> : <span className="font-bold text-xs uppercase">{acc.nickname[0]}</span>}
-                            </button>
-                        ))}
-                    </div>
-                )}
             </div>
           </div>
         ) : (
@@ -426,7 +358,7 @@ const App: React.FC = () => {
                                 <RefreshCw size={14} /> Повторить
                             </button>
                             <button onClick={() => { setIsAuthed(false); setRegStep(1); }} className="p-4 bg-slate-100 dark:bg-zinc-800 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest">
-                                Назад к входу
+                                Изменить ник
                             </button>
                         </div>
                     </div>
@@ -480,7 +412,6 @@ const App: React.FC = () => {
             <header className="h-24 border-b border-slate-100 dark:border-zinc-900 flex items-center justify-between px-8 glass z-10">
                 <div className="flex items-center gap-4">
                     <button onClick={() => setActiveChatId(null)} className="md:hidden p-3 bg-slate-100 dark:bg-zinc-800 rounded-xl active:scale-90"><ChevronLeft /></button>
-                    {/* Fixed: Removed non-existent setViewingProfileId call to resolve compilation error */}
                     <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-zinc-800 overflow-hidden">
                         {profiles[activeChatId]?.avatar ? <img src={profiles[activeChatId].avatar} className="w-full h-full object-cover" /> : <User className="m-auto mt-3 text-slate-400" />}
                     </div>
@@ -538,34 +469,13 @@ const App: React.FC = () => {
             <div className="w-full max-sm:w-[85%] max-w-sm bg-white dark:bg-zinc-950 p-8 md:p-12 flex flex-col animate-in slide-in-from-right duration-500 overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <header className="text-center mb-10">
                     <div className="w-24 h-24 rounded-premium mx-auto bg-slate-100 dark:bg-zinc-900 mb-6 overflow-hidden border-4 border-white shadow-xl">
-                        {activeAccount?.avatar ? <img src={activeAccount.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl font-black uppercase">{activeAccount?.nickname[0]}</div>}
+                        {currentUser?.avatar ? <img src={currentUser.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl font-black uppercase">{currentUser?.nickname[0]}</div>}
                     </div>
-                    <h2 className="text-2xl font-black uppercase tracking-tight">{activeAccount?.nickname}</h2>
+                    <h2 className="text-2xl font-black uppercase tracking-tight">{currentUser?.nickname}</h2>
                     <p className="text-[10px] font-black text-slate-400 tracking-widest mt-2 uppercase">ID: {peerService.getPeerId()}</p>
                 </header>
 
                 <div className="flex-1 space-y-10">
-                    <SettingsSection title="Мульти-аккаунты (макс 3)" icon={Users}>
-                        <div className="space-y-3">
-                            {accounts.map((acc, i) => (
-                                <div key={i} className={`flex items-center justify-between p-4 rounded-3xl border-2 transition-all ${currentAccountIndex === i ? 'border-black dark:border-white bg-slate-50 dark:bg-zinc-900' : 'border-transparent bg-slate-50/50 dark:bg-zinc-900/10'}`}>
-                                    <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => switchAccount(i)}>
-                                        <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-zinc-800 overflow-hidden">
-                                            {acc.avatar ? <img src={acc.avatar} className="w-full h-full object-cover" /> : <span className="m-auto font-black uppercase">{acc.nickname[0]}</span>}
-                                        </div>
-                                        <span className="font-black text-sm uppercase">{acc.nickname}</span>
-                                    </div>
-                                    <button onClick={() => deleteAccount(i)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl"><Trash2 size={16} /></button>
-                                </div>
-                            ))}
-                            {accounts.length < 3 && (
-                                <button onClick={() => { logoutAndClear(); setIsRegistering(true); }} className="w-full p-4 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center gap-3 text-slate-400 hover:text-black transition-all">
-                                    <UserPlus size={18} /> <span className="text-[10px] font-black uppercase tracking-widest">Добавить аккаунт</span>
-                                </button>
-                            )}
-                        </div>
-                    </SettingsSection>
-
                     <SettingsSection title="Периферия" icon={Volume2}>
                       <div className="space-y-4">
                         <div>
@@ -606,7 +516,7 @@ const App: React.FC = () => {
                 </div>
 
                 <button onClick={logoutAndClear} className="w-full p-5 bg-red-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs mt-10 shadow-xl shadow-red-600/20 active:scale-95 transition-all flex items-center justify-center gap-2">
-                  <LogOut size={18} /> Выход из системы
+                  <LogOut size={18} /> Сменить аккаунт
                 </button>
             </div>
         </div>
