@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nexus Messenger</title>
+    <title>Nexus Premium</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -35,29 +35,44 @@
             margin: 0;
             height: 100vh;
             overflow: hidden;
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
         }
         
-        .chat-container { height: 100vh; height: -webkit-fill-available; }
+        /* Telegram Chat Pattern */
+        .chat-bg {
+            background-image: url('https://user-images.githubusercontent.com/150330/37135110-e34346ca-22ca-11e8-936d-f4d1e25e406f.png');
+            background-repeat: repeat;
+            background-size: 400px;
+            opacity: 0.05;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .light-theme .chat-bg { opacity: 0.08; filter: invert(1); }
+
+        .chat-container { height: 100vh; height: -webkit-fill-available; z-index: 10; position: relative; }
         
         .bg-tg-sidebar { background-color: var(--tg-sidebar); }
         .bg-tg-chat { background-color: var(--tg-bg); }
         .bg-tg-active { background-color: var(--tg-active); }
         .bg-tg-input { background-color: var(--tg-input); }
-        .text-tg-gray { color: var(--tg-gray); }
         
-        .chat-bubble-in {
-            background-color: #182533;
-            border-radius: 12px 12px 12px 2px;
+        .message-anim {
+            animation: slideIn 0.2s ease-out;
         }
-        .light-theme .chat-bubble-in {
-            background-color: #eff2f5;
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        
-        .chat-bubble-out {
-            background-color: var(--tg-active);
-            border-radius: 12px 12px 2px 12px;
+
+        .avatar-gradient {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
         }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--tg-gray); border-radius: 10px; opacity: 0.3; }
         
         .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
