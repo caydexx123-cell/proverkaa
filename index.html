@@ -4,49 +4,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Nexus Premium</title>
+    <title>MARTAM - Приватный мессенджер</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --tg-bg: #0e1621;
-            --tg-sidebar: #17212b;
-            --tg-input: #242f3d;
-            --tg-active: #2b5278;
-            --tg-text: #ffffff;
-            --tg-gray: #708499;
-            --accent: #2b5278;
-            --msg-text: #ffffff;
+            /* Light Theme - High Contrast Premium */
+            --bg: #f8fafc;
+            --surface: rgba(255, 255, 255, 0.95);
+            --sidebar: #ffffff;
+            --input: #f1f5f9;
+            --accent: #0f172a;
+            --accent-glow: rgba(0, 0, 0, 0.05);
+            --text: #0f172a;
+            --text-dim: #475569;
+            --border: #e2e8f0;
+            --msg-me: #0f172a;
+            --msg-them: #f1f5f9;
+            --msg-text-me: #ffffff;
+            --msg-text-them: #0f172a;
+            --btn-ghost: #f1f5f9;
         }
         
-        body.light-theme {
-            --tg-bg: #f0f2f5;
-            --tg-sidebar: #ffffff;
-            --tg-input: #ffffff;
-            --tg-active: #0088cc;
-            --tg-text: #1c1c1c;
-            --tg-gray: #8e8e8e;
-            --msg-text: #1c1c1c;
-        }
-
-        body.new-year-theme {
-            --tg-bg: #0a2e12;
-            --tg-sidebar: #1a4a24;
-            --tg-input: #265c32;
-            --tg-active: #c41e3a;
-            --tg-text: #ffffff;
-            --tg-gray: #a8d5ba;
-            --msg-text: #ffffff;
+        body.dark-theme {
+            /* Dark Theme - Midnight Graphite */
+            --bg: #09090b;
+            --surface: rgba(24, 24, 27, 0.8);
+            --sidebar: #09090b;
+            --input: #27272a;
+            --accent: #ffffff;
+            --accent-glow: rgba(255, 255, 255, 0.1);
+            --text: #fafafa;
+            --text-dim: #a1a1aa;
+            --border: #27272a;
+            --msg-me: #fafafa;
+            --msg-them: #18181b;
+            --msg-text-me: #09090b;
+            --msg-text-them: #fafafa;
+            --btn-ghost: #18181b;
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--tg-bg);
-            color: var(--tg-text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
             margin: 0;
             height: 100dvh;
             overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.5s ease;
         }
 
         #three-canvas {
@@ -57,53 +62,77 @@
             height: 100%;
             z-index: -1;
             pointer-events: none;
-            opacity: 0.3;
+            opacity: 0.8;
         }
         
-        .chat-bg-pattern {
-            background-image: url('https://user-images.githubusercontent.com/150330/37135110-e34346ca-22ca-11e8-936d-f4d1e25e406f.png');
-            background-repeat: repeat;
-            background-size: 500px;
-            opacity: 0.03;
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
+        .glass {
+            background: var(--surface);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid var(--border);
         }
 
-        .snowflake {
-            color: #fff;
-            font-size: 1.2em;
-            position: fixed;
-            top: -10%;
-            z-index: 9999;
-            user-select: none;
-            animation: snowflakes-fall 10s linear infinite, snowflakes-shake 3s ease-in-out infinite;
-        }
-        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
-        @keyframes snowflakes-shake { 0% { transform: translateX(0px); } 50% { transform: translateX(80px); } 100% { transform: translateX(0px); } }
-
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 10px; }
         
         .message-bubble {
-            max-width: 85%;
-            animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            color: var(--msg-text) !important;
-        }
-        .light-theme .message-bubble.bg-tg-sidebar { background-color: #e4e6eb; }
-        .light-theme .message-bubble.bg-tg-active { color: white !important; }
-
-        @keyframes popIn {
-            from { opacity: 0; transform: scale(0.9) translateY(10px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
+            max-width: 78%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+            animation: bubbleIn 0.3s cubic-bezier(0.2, 1, 0.3, 1);
         }
 
-        .glass {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        @keyframes bubbleIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
+
+        .btn-modern {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            background-color: var(--btn-ghost);
+            border: 1px solid var(--border);
+        }
+        .btn-modern:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.05);
+        }
+        .btn-modern:active {
+            transform: scale(0.96);
+        }
+
+        input, textarea, select {
+            color: var(--text) !important;
+            background-color: var(--input) !important;
+            border: 1.5px solid var(--border) !important;
+        }
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--text) !important;
+            outline: none;
+            background-color: white !important;
+        }
+        body.dark-theme input:focus {
+            background-color: #18181b !important;
+        }
+
+        .msg-me { background: var(--msg-me); color: var(--msg-text-me); }
+        .msg-them { background: var(--msg-them); color: var(--msg-text-them); }
+        
+        .nav-sidebar {
+            background: var(--sidebar);
+        }
+
+        .premium-shadow {
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        }
+        body.dark-theme .premium-shadow {
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .animate-shake { animation: shake 0.3s ease-in-out; }
     </style>
 <script type="importmap">
 {
@@ -119,7 +148,7 @@
 }
 </script>
 </head>
-<body class="dark-theme">
+<body class="light-theme">
     <canvas id="three-canvas"></canvas>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>

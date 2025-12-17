@@ -19,7 +19,8 @@ class PeerService {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:global.stun.twilio.com:3478' }
-          ]
+          ],
+          sdpSemantics: 'unified-plan'
         }
       });
 
@@ -61,13 +62,25 @@ class PeerService {
   callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
     if (!this.peer) return null;
     return this.peer.call(targetId.toUpperCase(), stream, {
-      metadata: { nickname: localStorage.getItem('nexus_nick') }
+      metadata: { 
+        nickname: localStorage.getItem('mm_nick'),
+        avatar: localStorage.getItem('mm_avatar')
+      }
     });
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
     const conn = this.connections.get(targetId.toUpperCase());
-    if (conn && conn.open) conn.send(message);
+    if (conn && conn.open) {
+      conn.send(message);
+    } else {
+      // Try to re-establish if missing
+      this.connectToPeer(targetId);
+      setTimeout(() => {
+        const retryConn = this.connections.get(targetId.toUpperCase());
+        if (retryConn && retryConn.open) retryConn.send(message);
+      }, 500);
+    }
   }
 
   onMessage(cb: (msg: NetworkMessage) => void) { this.onMessageCallback = cb; }

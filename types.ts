@@ -4,16 +4,17 @@ export interface PlayerProfile {
   avatar?: string;
   joinedAt: number;
   blocked?: boolean;
+  online?: boolean;
 }
 
-export type MessageType = 'PLAYER_JOINED' | 'PLAYER_LEFT' | 'SYNC_PROFILE' | 'CHAT' | 'IMAGE' | 'PING' | 'PONG';
+export type MessageType = 'SYNC_PROFILE' | 'CHAT' | 'IMAGE' | 'VOICE' | 'CALL_LOG' | 'READ_RECEIPT' | 'HEARTBEAT';
 
 export interface NetworkMessage {
   type: MessageType;
   payload: any;
   senderId: string;
   senderNickname: string;
-  senderAvatar?: string;
+  messageId?: string;
 }
 
 export interface ChatMessage {
@@ -22,12 +23,17 @@ export interface ChatMessage {
   senderName: string;
   text?: string;
   imageUrl?: string;
+  voiceUrl?: string;
+  callDuration?: string;
   time: string;
   isMe: boolean;
+  isRead?: boolean;
+  type?: MessageType;
 }
 
 export interface AppSettings {
   audioInputId?: string;
-  audioOutputId?: string;
   videoInputId?: string;
+  isMicMuted?: boolean;
+  isCamOff?: boolean;
 }
