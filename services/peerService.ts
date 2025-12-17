@@ -13,25 +13,49 @@ class PeerService {
   async init(nickname: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      
+      // Cleanup existing peer if re-initializing
+      if (this.peer) {
+        this.peer.destroy();
+      }
+
       this.peer = new Peer(sanitizedId, {
         debug: 1,
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:global.stun.twilio.com:3478' }
           ],
           sdpSemantics: 'unified-plan'
         }
       });
 
-      this.peer.on('open', (id) => resolve(id));
-      this.peer.on('connection', (conn) => this.setupConnection(conn));
+      this.peer.on('open', (id) => {
+        console.log('Peer opened with ID:', id);
+        resolve(id);
+      });
+
+      this.peer.on('connection', (conn) => {
+        console.log('Incoming connection from:', conn.peer);
+        this.setupConnection(conn);
+      });
+
       this.peer.on('call', (call) => {
+        console.log('Incoming call from:', call.peer);
         if (this.onCallCallback) this.onCallCallback(call);
       });
+
       this.peer.on('error', (err) => {
+        console.error('Peer error:', err);
         if (err.type === 'unavailable-id') reject(new Error("Ник занят"));
         else reject(err);
+      });
+
+      this.peer.on('disconnected', () => {
+        console.log('Peer disconnected, attempting to reconnect...');
+        this.peer?.reconnect();
       });
     });
   }
@@ -41,18 +65,31 @@ class PeerService {
       this.connections.set(conn.peer, conn);
       if (this.onConnectionCallback) this.onConnectionCallback(conn.peer);
     });
+
     conn.on('data', (data: any) => {
       if (this.onMessageCallback) this.onMessageCallback(data as NetworkMessage);
     });
+
     conn.on('close', () => {
       this.connections.delete(conn.peer);
       if (this.onDisconnectCallback) this.onDisconnectCallback(conn.peer);
     });
+
+    conn.on('error', (err) => {
+      console.error('Connection error with', conn.peer, ':', err);
+    });
   }
 
   connectToPeer(targetId: string) {
-    if (!this.peer) return;
+    if (!this.peer || this.peer.destroyed) return;
     const sanitizedTarget = targetId.toUpperCase();
+    
+    // Check if already connected
+    if (this.connections.has(sanitizedTarget)) {
+        const existing = this.connections.get(sanitizedTarget);
+        if (existing?.open) return;
+    }
+
     const conn = this.peer.connect(sanitizedTarget, {
       reliable: true
     });
@@ -60,7 +97,7 @@ class PeerService {
   }
 
   callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
-    if (!this.peer) return null;
+    if (!this.peer || this.peer.destroyed) return null;
     return this.peer.call(targetId.toUpperCase(), stream, {
       metadata: { 
         nickname: localStorage.getItem('mm_nick'),
@@ -70,16 +107,26 @@ class PeerService {
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
-    const conn = this.connections.get(targetId.toUpperCase());
+    const target = targetId.toUpperCase();
+    let conn = this.connections.get(target);
+    
     if (conn && conn.open) {
       conn.send(message);
     } else {
-      // Try to re-establish if missing
-      this.connectToPeer(targetId);
-      setTimeout(() => {
-        const retryConn = this.connections.get(targetId.toUpperCase());
-        if (retryConn && retryConn.open) retryConn.send(message);
-      }, 500);
+      console.log('Connection not ready, attempting to connect to', target);
+      this.connectToPeer(target);
+      
+      // Wait a bit and try sending again
+      const checkAndSend = (retries: number) => {
+          if (retries <= 0) return;
+          const retryConn = this.connections.get(target);
+          if (retryConn && retryConn.open) {
+              retryConn.send(message);
+          } else {
+              setTimeout(() => checkAndSend(retries - 1), 1000);
+          }
+      };
+      checkAndSend(5);
     }
   }
 

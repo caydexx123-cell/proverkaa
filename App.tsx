@@ -74,14 +74,19 @@ const App: React.FC = () => {
 
   // Device handling
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(d => {
-      setDevices(d);
-      const firstAudio = d.find(i => i.kind === 'audioinput');
-      const firstOutput = d.find(i => i.kind === 'audiooutput');
-      if (firstAudio) setSelectedAudioId(firstAudio.deviceId);
-      if (firstOutput) setSelectedOutputId(firstOutput.deviceId);
-    });
-  }, []);
+    const updateDevices = () => {
+        navigator.mediaDevices.enumerateDevices().then(d => {
+            setDevices(d);
+            const firstAudio = d.find(i => i.kind === 'audioinput');
+            const firstOutput = d.find(i => i.kind === 'audiooutput');
+            if (firstAudio && !selectedAudioId) setSelectedAudioId(firstAudio.deviceId);
+            if (firstOutput && !selectedOutputId) setSelectedOutputId(firstOutput.deviceId);
+        }).catch(err => console.log('Device enum failed:', err));
+    };
+    updateDevices();
+    navigator.mediaDevices.addEventListener('devicechange', updateDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', updateDevices);
+  }, [selectedAudioId, selectedOutputId]);
 
   // Theme Sync
   useEffect(() => {
@@ -111,19 +116,38 @@ const App: React.FC = () => {
   }, [conversations, contacts, profiles, nickname, password, avatar, isAuthed, storedPassword]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (activeChatId) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [conversations, activeChatId]);
+
+  // HEARTBEAT mechanism to keep P2P connections alive
+  useEffect(() => {
+    if (!isReady) return;
+    const interval = setInterval(() => {
+      contacts.forEach(id => {
+        peerService.sendTo(id, {
+          type: 'HEARTBEAT',
+          payload: null,
+          senderId: peerService.getPeerId()!,
+          senderNickname: nickname
+        });
+      });
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isReady, contacts, nickname]);
 
   const handleInitialize = async () => {
     const cleanNick = nickname.trim().toUpperCase();
     if (!cleanNick) return;
     try {
       const initPromise = peerService.init(cleanNick);
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000));
       await Promise.race([initPromise, timeout]);
       setIsReady(true);
     } catch (err: any) { 
-      setSearchError(err.message === "Ник занят" ? "Никнейм уже занят" : "Ошибка сервера. Перезагрузите сайт.");
+      console.error("Initialization error:", err);
+      setSearchError(err.message === "Ник занят" ? "Никнейм уже занят" : "Ошибка сети. Обновите MARTAM.");
       setRegStep(1);
     }
   };
@@ -169,6 +193,8 @@ const App: React.FC = () => {
   };
 
   const handleMessage = useCallback((msg: NetworkMessage) => {
+    if (msg.type === 'HEARTBEAT') return;
+
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     if (msg.type === 'TYPING') {
@@ -224,14 +250,19 @@ const App: React.FC = () => {
     if (!isReady) return;
     peerService.onMessage(handleMessage);
     peerService.onConnection(id => {
+      console.log('Connected with:', id);
       sendMyProfile(id);
       setProfiles(prev => ({ ...prev, [id]: { ...prev[id], online: true } }));
+      if (!contacts.includes(id)) setContacts(prev => [...prev, id]);
     });
     peerService.onDisconnect(id => {
       setProfiles(prev => ({ ...prev, [id]: { ...prev[id], online: false } }));
     });
-    peerService.onCall(call => setIncomingCall(call));
-  }, [isReady, handleMessage, sendMyProfile]);
+    peerService.onCall(call => {
+        console.log('Receiving call from:', call.peer);
+        setIncomingCall(call);
+    });
+  }, [isReady, handleMessage, sendMyProfile, contacts]);
 
   const handleSearch = async () => {
     const target = searchQuery.trim().toUpperCase();
@@ -247,7 +278,7 @@ const App: React.FC = () => {
         setActiveChatId(target);
         setSearchQuery('');
         if (!profiles[target]) setProfiles(prev => ({ ...prev, [target]: { nickname: target, joinedAt: Date.now(), online: true } }));
-      }, 1000);
+      }, 1500);
     } catch (err) {
       setIsSearching(false);
       setSearchError("ID не в сети или не существует");
@@ -301,7 +332,10 @@ const App: React.FC = () => {
       timerRef.current = window.setInterval(() => {
         setRecordingTime(t => t + 1);
       }, 1000);
-    } catch (e) { alert("Микрофон заблокирован"); }
+    } catch (e) { 
+        console.error("Recording error:", e);
+        alert("Микрофон заблокирован или недоступен"); 
+    }
   };
 
   const stopAndSendRecording = () => {
@@ -354,8 +388,8 @@ const App: React.FC = () => {
                 const source = context.createMediaElementSource(audio);
                 const gainNode = context.createGain();
                 
-                // ЗНАЧИТЕЛЬНОЕ УСИЛЕНИЕ ЗВУКА: 6.0 (600% громкости)
-                gainNode.gain.value = 6.0; 
+                // ЭКСТРЕМАЛЬНОЕ УСИЛЕНИЕ ЗВУКА: 10.0 (1000% громкости)
+                gainNode.gain.value = 10.0; 
                 
                 source.connect(gainNode);
                 gainNode.connect(context.destination);
@@ -371,7 +405,7 @@ const App: React.FC = () => {
             if (audioContextRef.current?.state === 'suspended') {
                 await audioContextRef.current.resume();
             }
-            audio.play();
+            audio.play().catch(err => console.error("Playback failed", err));
             setIsPlaying(true);
         } else {
             audio.pause();
@@ -407,7 +441,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex justify-between items-center px-0.5">
                 <span className={`text-[7px] font-black uppercase tracking-[0.2em] opacity-40 flex items-center gap-1 ${isMe ? 'text-white' : 'text-black dark:text-white'}`}>
-                   {isPlaying ? 'PLAYING MAX' : 'BOOSTED AUDIO'} <Volume2 className="w-2.5 h-2.5" />
+                   {isPlaying ? 'MAX VOLUME' : 'VOICE BOOSTED'} <Volume2 className="w-2.5 h-2.5" />
                 </span>
             </div>
         </div>
@@ -419,31 +453,54 @@ const App: React.FC = () => {
   const startCall = async (video: boolean) => {
     if (!activeChatId) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: true, 
+          video: video ? { facingMode: 'user' } : false 
+      });
       setLocalStream(stream);
       const call = peerService.callPeer(activeChatId, stream);
       if (call) {
         setCallStartTime(Date.now());
         call.on('stream', (remote: MediaStream) => setRemoteStream(remote));
         call.on('close', finalizeCall);
+        call.on('error', (err: any) => {
+            console.error("Call error:", err);
+            finalizeCall();
+        });
         setCurrentCall(call);
         setCallSettings({ isMicMuted: false, isCamOff: !video });
       }
-    } catch (err) { alert("Ошибка вызова"); }
+    } catch (err) { 
+        console.error("Start call failed:", err);
+        alert("Ошибка вызова: Проверьте разрешения камеры/микрофона"); 
+    }
   };
 
   const answerCall = async () => {
     if (!incomingCall) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: true, 
+          video: true 
+      });
       setLocalStream(stream);
       incomingCall.answer(stream);
       setCallStartTime(Date.now());
-      incomingCall.on('stream', (remote: MediaStream) => setRemoteStream(remote));
+      incomingCall.on('stream', (remote: MediaStream) => {
+          console.log('Remote stream received');
+          setRemoteStream(remote);
+      });
       incomingCall.on('close', finalizeCall);
+      incomingCall.on('error', (err: any) => {
+          console.error("Answer call error:", err);
+          finalizeCall();
+      });
       setCurrentCall(incomingCall);
       setIncomingCall(null);
-    } catch (err) { alert("Ошибка ответа"); }
+    } catch (err) { 
+        console.error("Answer call failed:", err);
+        alert("Ошибка принятия вызова: Разрешите доступ к медиа"); 
+    }
   };
 
   const finalizeCall = () => {
@@ -455,13 +512,20 @@ const App: React.FC = () => {
   };
 
   const endCall = () => {
-    if (currentCall) currentCall.close();
-    if (incomingCall) incomingCall.close();
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    if (currentCall) {
+        try { currentCall.close(); } catch(e) {}
+    }
+    if (incomingCall) {
+        try { incomingCall.close(); } catch(e) {}
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+    }
     setLocalStream(null);
     setRemoteStream(null);
     setCurrentCall(null);
     setIncomingCall(null);
+    setCallStartTime(null);
   };
 
   const toggleMic = () => {
@@ -490,7 +554,6 @@ const App: React.FC = () => {
     </div>
   );
 
-  // Logo Component
   const Logo = ({ size = "text-2xl" }: { size?: string }) => (
     <div className="flex items-center gap-3 select-none">
         <div className={`aspect-square w-10 flex items-center justify-center bg-black dark:bg-white rounded-xl shadow-lg`}>
@@ -500,7 +563,6 @@ const App: React.FC = () => {
     </div>
   );
 
-  // Initial Auth Screen
   if (!isReady || !isAuthed) {
     return (
       <div className="h-screen w-full flex items-center justify-center p-4 bg-white dark:bg-black transition-colors overflow-hidden">
@@ -598,8 +660,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-full overflow-hidden relative transition-colors bg-white dark:bg-black">
       <div className="flex-1 flex relative z-10 h-full">
-        
-        {/* Sidebar */}
         <aside className={`w-full md:w-80 lg:w-[380px] bg-white dark:bg-black border-r border-slate-100 dark:border-zinc-900 flex flex-col flex-shrink-0 transition-all ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
             <div className="p-8 pb-4 flex flex-col gap-8">
                 <div className="flex items-center justify-between">
@@ -665,7 +725,6 @@ const App: React.FC = () => {
             </div>
         </aside>
 
-        {/* Chat Area */}
         <main className={`flex-1 flex flex-col bg-white dark:bg-black relative ${!activeChatId ? 'hidden md:flex items-center justify-center' : 'flex'}`}>
             {!activeChatId ? (
                 <div className="text-center p-12 max-w-sm flex flex-col items-center animate-in fade-in zoom-in duration-1000">
@@ -709,7 +768,7 @@ const App: React.FC = () => {
                     <div className="flex-1 overflow-y-auto p-6 md:p-12 space-y-8 custom-scrollbar bg-slate-50/20 dark:bg-black">
                         {conversations[activeChatId]?.map(msg => (
                             <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`message-bubble p-4.5 rounded-[2rem] shadow-sm ${msg.isMe ? 'msg-me rounded-br-none' : 'msg-them rounded-bl-none'}`}>
+                                <div className={`message-bubble rounded-[2rem] shadow-sm ${msg.isMe ? 'msg-me rounded-br-none self-end' : 'msg-them rounded-bl-none self-start'}`}>
                                     {msg.type === 'IMAGE' && (
                                         <div className="rounded-2xl overflow-hidden mb-3 border border-white/10 shadow-lg">
                                             <img src={msg.imageUrl} className="max-h-[500px] w-full object-contain bg-black/5" />
@@ -719,11 +778,11 @@ const App: React.FC = () => {
                                     {msg.type === 'CALL_LOG' && (
                                         <div className="flex items-center gap-3 py-1 opacity-70 text-[11px] font-black uppercase tracking-widest">
                                             <div className="p-2 bg-white/10 rounded-xl"><Phone className="w-4 h-4" /></div>
-                                            Звонок завершен • {msg.callDuration}
+                                            Звонок • {msg.callDuration}
                                         </div>
                                     )}
-                                    {msg.text && <p className="text-[15.5px] font-bold leading-relaxed whitespace-pre-wrap tracking-tight">{msg.text}</p>}
-                                    <div className="flex items-center justify-end gap-2 mt-2.5 opacity-40">
+                                    {msg.text && <p className="text-[15.5px] font-bold leading-relaxed whitespace-pre-wrap tracking-tight break-words">{msg.text}</p>}
+                                    <div className="flex items-center justify-end gap-2 mt-2 opacity-50">
                                         <span className={`text-[9px] font-black`}>{msg.time}</span>
                                         {msg.isMe && <CheckCheck className={`w-3.5 h-3.5 ${msg.isRead ? 'text-blue-500' : ''}`} />}
                                     </div>
@@ -781,7 +840,6 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      {/* Profile Detail View (Modal) */}
       <div className={`fixed inset-0 z-[150] transition-all duration-500 flex items-center justify-center p-6 ${viewingProfileId ? 'visible opacity-100' : 'invisible opacity-0'}`}>
         <div className="absolute inset-0 bg-black/40 dark:bg-black/90 backdrop-blur-md" onClick={() => setViewingProfileId(null)} />
         <div className={`w-full max-w-sm glass rounded-premium overflow-hidden transition-all duration-500 scale-in-95 ${viewingProfileId ? 'scale-100' : 'scale-90'}`}>
@@ -813,12 +871,12 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-4">
-                    <button className="flex flex-col items-center gap-2 p-4 glass rounded-3xl hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all active:scale-95" onClick={() => startCall(false)}>
-                        <Phone className="w-5 h-5 text-green-500" />
+                    <button className="flex items-center justify-center gap-2 p-4 glass rounded-3xl hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all active:scale-95" onClick={() => startCall(false)}>
+                        <Phone className="w-4 h-4 text-green-500" />
                         <span className="text-[9px] font-black uppercase tracking-widest">Вызов</span>
                     </button>
-                    <button className="flex flex-col items-center gap-2 p-4 glass rounded-3xl hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all active:scale-95" onClick={() => startCall(true)}>
-                        <VideoIcon className="w-5 h-5 text-blue-500" />
+                    <button className="flex items-center justify-center gap-2 p-4 glass rounded-3xl hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all active:scale-95" onClick={() => startCall(true)}>
+                        <VideoIcon className="w-4 h-4 text-blue-500" />
                         <span className="text-[9px] font-black uppercase tracking-widest">Видео</span>
                     </button>
                 </div>
@@ -838,7 +896,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Settings Menu (Sidebar) */}
       <div className={`fixed inset-0 z-[200] transition-all duration-500 ${isMenuOpen ? 'visible' : 'invisible'}`}>
         <div className={`absolute inset-0 bg-black/30 dark:bg-black/80 backdrop-blur-sm transition-opacity duration-500 ${isMenuOpen ? 'opacity-100' : 'opacity-0'}`} onClick={() => setIsMenuOpen(false)} />
         <div className={`absolute left-0 top-0 bottom-0 w-full max-w-sm glass flex flex-col transition-transform duration-500 ease-out border-r border-slate-100 dark:border-zinc-900 ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -870,13 +927,12 @@ const App: React.FC = () => {
             </header>
             
             <div className="flex-1 p-8 pt-6 space-y-10 overflow-y-auto custom-scrollbar">
-                
                 <SettingsSection title="Стиль и темы" icon={Palette}>
                     <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => setTheme('light')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 transition-all border-2 ${theme === 'light' ? 'bg-black text-white border-black shadow-lg scale-105' : 'bg-white dark:bg-zinc-800/50 border-transparent text-slate-400 hover:border-slate-200 dark:hover:border-zinc-700'}`}>
+                        <button onClick={() => setTheme('light')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 transition-all border-2 ${theme === 'light' ? 'bg-black text-white border-black shadow-lg scale-105' : 'bg-white dark:bg-zinc-800/50 border-transparent text-slate-400'}`}>
                             <Sun className="w-5 h-5" /> <span className="text-[10px] font-black uppercase tracking-widest">Светлая</span>
                         </button>
-                        <button onClick={() => setTheme('dark')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 transition-all border-2 ${theme === 'dark' ? 'bg-white text-black border-white shadow-lg scale-105' : 'bg-white dark:bg-zinc-800 border-transparent text-slate-400 hover:border-slate-200 dark:hover:border-zinc-700'}`}>
+                        <button onClick={() => setTheme('dark')} className={`p-4 rounded-2xl flex flex-col items-center gap-2 transition-all border-2 ${theme === 'dark' ? 'bg-white text-black border-white shadow-lg scale-105' : 'bg-white dark:bg-zinc-800 border-transparent text-slate-400'}`}>
                             <Moon className="w-5 h-5" /> <span className="text-[10px] font-black uppercase tracking-widest">Темная</span>
                         </button>
                     </div>
@@ -898,32 +954,18 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 </SettingsSection>
-
-                <SettingsSection title="Инфо" icon={Info}>
-                    <div className="text-[10.5px] font-bold text-slate-500/80 leading-relaxed px-1.5 text-center">
-                        MARTAM v2.5.5 — Приватность и мощь в ваших руках. Все данные остаются на ваших устройствах.
-                    </div>
-                </SettingsSection>
             </div>
 
             <div className="p-8 pb-12 space-y-4">
-                <button 
-                  onClick={() => { localStorage.clear(); window.location.reload(); }} 
-                  className="w-full flex items-center justify-center gap-3 p-5 bg-red-600 text-white rounded-[2rem] font-black text-xs hover:brightness-110 shadow-xl shadow-red-600/20 uppercase tracking-[0.2em] active:scale-95 transition-all"
-                >
-                    <LogOut className="w-5 h-5" /> Полный выход
+                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full flex items-center justify-center gap-3 p-5 bg-red-600 text-white rounded-[2rem] font-black text-xs shadow-xl shadow-red-600/20 uppercase tracking-[0.2em] active:scale-95 transition-all">
+                    <LogOut className="w-5 h-5" /> Выход и сброс
                 </button>
-                <div className="flex items-center justify-center gap-2 opacity-30">
-                    <Lock className="w-3 h-3" />
-                    <p className="text-[8px] font-black uppercase tracking-[0.3em]">SECURED END-TO-END</p>
-                </div>
             </div>
         </div>
       </div>
 
-      {/* Global Call Overlay */}
       {(currentCall || incomingCall) && (
-        <div className="fixed inset-0 z-[300] bg-black flex flex-col text-white animate-in slide-in-from-bottom duration-500 p-4">
+        <div className="fixed inset-0 z-[300] bg-black flex flex-col text-white p-4">
             <div className="max-w-4xl mx-auto w-full h-full glass rounded-premium overflow-hidden flex flex-col relative border border-white/5 bg-zinc-950 shadow-2xl">
                 <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
                 {localStream && !callSettings.isCamOff && (
@@ -934,21 +976,21 @@ const App: React.FC = () => {
                         <div className="w-28 h-28 rounded-premium bg-white/5 animate-pulse flex items-center justify-center text-5xl font-black mb-8 border border-white/5 uppercase">
                             {(incomingCall?.peer || currentCall?.peer)?.[0]}
                         </div>
-                        <h2 className="text-3xl font-black mb-2 tracking-tighter uppercase">{(incomingCall?.peer || currentCall?.peer)}</h2>
+                        <h2 className="text-3xl font-black mb-2 uppercase">{(incomingCall?.peer || currentCall?.peer)}</h2>
                         <div className="flex items-center gap-3 text-white/20 text-[10px] font-black uppercase tracking-[0.4em]"><ShieldCheck className="w-5 h-5" /> TUNNEL SECURED</div>
                     </div>
                 )}
                 <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-5 glass p-5 rounded-premium border border-white/10 bg-white/5 backdrop-blur-3xl shadow-2xl">
                     {incomingCall && !currentCall ? (
                         <>
-                            <button onClick={endCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all"><X className="w-8 h-8 text-white" /></button>
-                            <button onClick={answerCall} className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center shadow-lg animate-bounce transition-all"><Phone className="w-10 h-10 text-white" /></button>
+                            <button onClick={endCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center"><X className="w-8 h-8 text-white" /></button>
+                            <button onClick={answerCall} className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center animate-bounce"><Phone className="w-10 h-10 text-white" /></button>
                         </>
                     ) : (
                         <>
-                            <button onClick={toggleMic} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${callSettings.isMicMuted ? 'bg-red-500/40 text-red-500' : 'bg-white/10 hover:bg-white/20'}`}>{callSettings.isMicMuted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}</button>
-                            <button onClick={finalizeCall} className="w-22 h-22 bg-red-600 rounded-full flex items-center justify-center shadow-2xl hover:scale-105 active:scale-90 transition-all"><X className="w-12 h-12 text-white" /></button>
-                            <button onClick={toggleCam} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${callSettings.isCamOff ? 'bg-red-500/40 text-red-500' : 'bg-white/10 hover:bg-white/20'}`}>{callSettings.isCamOff ? <VideoOff className="w-5 h-5 text-white" /> : <VideoIcon className="w-5 h-5 text-white" />}</button>
+                            <button onClick={toggleMic} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${callSettings.isMicMuted ? 'bg-red-500/40 text-red-500' : 'bg-white/10'}`}>{callSettings.isMicMuted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}</button>
+                            <button onClick={finalizeCall} className="w-22 h-22 bg-red-600 rounded-full flex items-center justify-center shadow-2xl"><X className="w-12 h-12 text-white" /></button>
+                            <button onClick={toggleCam} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${callSettings.isCamOff ? 'bg-red-500/40 text-red-500' : 'bg-white/10'}`}>{callSettings.isCamOff ? <VideoOff className="w-5 h-5 text-white" /> : <VideoIcon className="w-5 h-5 text-white" />}</button>
                         </>
                     )}
                 </div>
