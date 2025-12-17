@@ -10,29 +10,41 @@ class PeerService {
   private onDisconnectCallback: ((id: string) => void) | null = null;
   private onCallCallback: ((call: MediaConnection) => void) | null = null;
 
-  async init(nickname: string): Promise<string> {
+  async init(nickname: string, retryCount = 0): Promise<string> {
+    // Принудительно уничтожаем старый Peer перед новой попыткой
+    if (this.peer) {
+      this.destroy();
+      // Даем браузеру и серверу PeerJS чуть больше времени на закрытие соединений
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
     return new Promise((resolve, reject) => {
       const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const peerId = `MARTAM_${sanitizedId}`;
       
-      if (this.peer) {
-        this.peer.destroy();
-      }
+      console.log(`[PeerService] Initializing ${peerId} (Attempt ${retryCount + 1})`);
 
-      this.peer = new Peer(sanitizedId, {
+      this.peer = new Peer(peerId, {
         debug: 1,
+        secure: true,
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:global.stun.twilio.com:3478' }
-          ],
-          sdpSemantics: 'unified-plan'
+          ]
         }
       });
 
+      const timeout = setTimeout(() => {
+        if (this.peer && !this.peer.open) {
+          this.destroy();
+          reject(new Error("Сервер PeerJS не отвечает. Проверьте интернет."));
+        }
+      }, 12000);
+
       this.peer.on('open', (id) => {
-        console.log('Peer opened:', id);
+        clearTimeout(timeout);
+        console.log('[PeerService] Opened:', id);
         resolve(id);
       });
 
@@ -44,16 +56,62 @@ class PeerService {
         if (this.onCallCallback) this.onCallCallback(call);
       });
 
-      this.peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        if (err.type === 'unavailable-id') reject(new Error("Ник занят"));
-        else reject(err);
+      this.peer.on('error', async (err) => {
+        clearTimeout(timeout);
+        console.error('[PeerService] Error:', err.type, err);
+
+        if (err.type === 'unavailable-id') {
+          this.destroy();
+          if (retryCount < 1) {
+            console.log("[PeerService] ID taken, retrying once...");
+            await new Promise(res => setTimeout(res, 2000));
+            try {
+              const res = await this.init(nickname, retryCount + 1);
+              resolve(res);
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Ник ${nickname} всё ещё занят. Подождите 15 секунд или смените ник.`));
+          }
+        } else {
+          reject(err);
+        }
       });
 
       this.peer.on('disconnected', () => {
-        this.peer?.reconnect();
+        if (this.peer && !this.peer.destroyed) {
+          console.log('[PeerService] Disconnected. Reconnecting...');
+          this.peer.reconnect();
+        }
       });
     });
+  }
+
+  destroy() {
+    if (this.peer) {
+      console.log("[PeerService] Destroying current instance...");
+      // Сначала закрываем все активные соединения данных
+      this.connections.forEach(conn => {
+        try { if (conn.open) conn.close(); } catch(e) {}
+      });
+      this.connections.clear();
+      
+      // Отписываемся от всех событий, чтобы не было ложных срабатываний при пересоздании
+      this.peer.off('open');
+      this.peer.off('error');
+      this.peer.off('connection');
+      this.peer.off('call');
+      this.peer.off('disconnected');
+
+      try {
+        this.peer.disconnect();
+        this.peer.destroy();
+      } catch (e) {
+        console.warn("[PeerService] Error during destruction:", e);
+      }
+      this.peer = null;
+    }
   }
 
   private setupConnection(conn: DataConnection) {
@@ -72,7 +130,7 @@ class PeerService {
     });
 
     conn.on('error', (err) => {
-      console.error('Conn error:', err);
+      console.error('[PeerService] Conn error:', err);
       this.connections.delete(conn.peer);
     });
   }
@@ -80,20 +138,25 @@ class PeerService {
   connectToPeer(targetId: string) {
     if (!this.peer || this.peer.destroyed) return;
     const target = targetId.toUpperCase();
-    if (this.connections.get(target)?.open) return;
+    const fullId = target.startsWith('MARTAM_') ? target : `MARTAM_${target}`;
+    
+    if (this.connections.get(fullId)?.open) return;
 
-    const conn = this.peer.connect(target, { reliable: true });
+    const conn = this.peer.connect(fullId, { reliable: true });
     this.setupConnection(conn);
   }
 
   callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
     if (!this.peer || this.peer.destroyed) return null;
-    return this.peer.call(targetId.toUpperCase(), stream);
+    const target = targetId.toUpperCase();
+    const fullId = target.startsWith('MARTAM_') ? target : `MARTAM_${target}`;
+    return this.peer.call(fullId, stream);
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
     const target = targetId.toUpperCase();
-    let conn = this.connections.get(target);
+    const fullId = target.startsWith('MARTAM_') ? target : `MARTAM_${target}`;
+    let conn = this.connections.get(fullId);
     
     if (conn && conn.open) {
       conn.send(message);
@@ -101,11 +164,11 @@ class PeerService {
       this.connectToPeer(target);
       const retry = (count: number) => {
           if (count <= 0) return;
-          const c = this.connections.get(target);
+          const c = this.connections.get(fullId);
           if (c && c.open) c.send(message);
           else setTimeout(() => retry(count - 1), 1000);
       };
-      retry(5);
+      retry(3);
     }
   }
 
@@ -114,7 +177,10 @@ class PeerService {
   onDisconnect(cb: (id: string) => void) { this.onDisconnectCallback = cb; }
   onCall(cb: (call: MediaConnection) => void) { this.onCallCallback = cb; }
 
-  getPeerId() { return this.peer?.id || null; }
+  getPeerId() { 
+    if (!this.peer?.id) return null;
+    return this.peer.id.replace('MARTAM_', '');
+  }
 }
 
 export const peerService = new PeerService();
