@@ -7,7 +7,7 @@ export interface PlayerProfile {
   online?: boolean;
 }
 
-export type MessageType = 'SYNC_PROFILE' | 'CHAT' | 'IMAGE' | 'VOICE' | 'CALL_LOG' | 'READ_RECEIPT' | 'HEARTBEAT';
+export type MessageType = 'SYNC_PROFILE' | 'CHAT' | 'IMAGE' | 'VOICE' | 'CALL_LOG' | 'READ_RECEIPT' | 'HEARTBEAT' | 'TYPING';
 
 export interface NetworkMessage {
   type: MessageType;

@@ -4,44 +4,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MARTAM - Приватный мессенджер</title>
+    <title>MARTAM</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              border: "var(--border)",
+              surface: "var(--surface)",
+              sidebar: "var(--sidebar)",
+            },
+            borderRadius: {
+              'premium': '2.5rem',
+            }
+          }
+        }
+      }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* Light Theme - High Contrast Premium */
-            --bg: #f8fafc;
-            --surface: rgba(255, 255, 255, 0.95);
-            --sidebar: #ffffff;
-            --input: #f1f5f9;
-            --accent: #0f172a;
-            --accent-glow: rgba(0, 0, 0, 0.05);
-            --text: #0f172a;
-            --text-dim: #475569;
-            --border: #e2e8f0;
-            --msg-me: #0f172a;
-            --msg-them: #f1f5f9;
+            --bg: #ffffff;
+            --surface: #ffffff;
+            --sidebar: #f9fafb;
+            --input: #f3f4f6;
+            --text: #000000;
+            --text-dim: #6b7280;
+            --border: #f1f1f1;
+            --msg-me: #000000;
+            --msg-them: #f3f4f6;
             --msg-text-me: #ffffff;
-            --msg-text-them: #0f172a;
-            --btn-ghost: #f1f5f9;
+            --msg-text-them: #000000;
         }
         
-        body.dark-theme {
-            /* Dark Theme - Midnight Graphite */
-            --bg: #09090b;
-            --surface: rgba(24, 24, 27, 0.8);
-            --sidebar: #09090b;
-            --input: #27272a;
-            --accent: #ffffff;
-            --accent-glow: rgba(255, 255, 255, 0.1);
-            --text: #fafafa;
-            --text-dim: #a1a1aa;
-            --border: #27272a;
-            --msg-me: #fafafa;
-            --msg-them: #18181b;
-            --msg-text-me: #09090b;
-            --msg-text-them: #fafafa;
-            --btn-ghost: #18181b;
+        html.dark {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --sidebar: #050505;
+            --input: #111111;
+            --text: #ffffff;
+            --text-dim: #9ca3af;
+            --border: #1a1a1a;
+            --msg-me: #ffffff;
+            --msg-them: #111111;
+            --msg-text-me: #000000;
+            --msg-text-them: #ffffff;
         }
 
         body {
@@ -51,88 +62,63 @@
             margin: 0;
             height: 100dvh;
             overflow: hidden;
-            transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.5s ease;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         #three-canvas {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             z-index: -1;
             pointer-events: none;
-            opacity: 0.8;
+            opacity: 0.1;
         }
         
         .glass {
             background: var(--surface);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
             border: 1px solid var(--border);
         }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 10px; }
         
         .message-bubble {
-            max-width: 78%;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
-            animation: bubbleIn 0.3s cubic-bezier(0.2, 1, 0.3, 1);
+            max-width: 80%;
+            border: 1px solid var(--border);
+            animation: slideIn 0.2s cubic-bezier(0, 0, 0.2, 1);
         }
 
-        @keyframes bubbleIn {
-            from { opacity: 0; transform: translateY(10px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes slideIn {
+          from { transform: translateY(10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
         }
 
         .btn-modern {
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            background-color: var(--btn-ghost);
+            background: var(--input);
             border: 1px solid var(--border);
+            color: var(--text);
         }
-        .btn-modern:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.05);
-        }
-        .btn-modern:active {
-            transform: scale(0.96);
-        }
+        .btn-modern:active { transform: scale(0.94); }
 
-        input, textarea, select {
-            color: var(--text) !important;
+        select {
+            appearance: none;
             background-color: var(--input) !important;
-            border: 1.5px solid var(--border) !important;
-        }
-        input:focus, textarea:focus, select:focus {
-            border-color: var(--text) !important;
-            outline: none;
-            background-color: white !important;
-        }
-        body.dark-theme input:focus {
-            background-color: #18181b !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border) !important;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='gray' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.1em;
+            padding: 0.75rem 2.5rem 0.75rem 1rem;
+            border-radius: 1.25rem;
+            width: 100%;
+            font-weight: 600;
+            font-size: 0.875rem;
         }
 
-        .msg-me { background: var(--msg-me); color: var(--msg-text-me); }
+        .msg-me { background: var(--msg-me); color: var(--msg-text-me); border: none; }
         .msg-them { background: var(--msg-them); color: var(--msg-text-them); }
-        
-        .nav-sidebar {
-            background: var(--sidebar);
-        }
-
-        .premium-shadow {
-            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
-        }
-        body.dark-theme .premium-shadow {
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
-        }
-        .animate-shake { animation: shake 0.3s ease-in-out; }
     </style>
 <script type="importmap">
 {
@@ -148,9 +134,19 @@
 }
 </script>
 </head>
-<body class="light-theme">
+<body>
     <canvas id="three-canvas"></canvas>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          // Использование "./" гарантирует относительный путь от текущей директории
+          navigator.serviceWorker.register('./sw.js').catch(err => {
+            console.log('SW registration suppressed (development environment)');
+          });
+        });
+      }
+    </script>
 </body>
 </html>
