@@ -11,9 +11,9 @@ class PeerService {
 
   async init(nickname: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      // Create a random readable ID suffix or use standard random
-      const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-      this.peer = new Peer(`MN-${randomId}`);
+      // Испольуем никнейм как ID (очищаем от спецсимволов и переводим в верхний регистр)
+      const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      this.peer = new Peer(sanitizedId);
 
       this.peer.on('open', (id) => {
         console.log('Peer ID initialized:', id);
@@ -26,7 +26,15 @@ class PeerService {
 
       this.peer.on('error', (err) => {
         console.error('Peer error:', err);
-        reject(err);
+        // Если ID занят, добавляем рандом
+        if (err.type === 'unavailable-id') {
+           const randomId = sanitizedId + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
+           this.peer = new Peer(randomId);
+           // Рекурсивно не будем, просто попробуем еще раз с новым ID
+           reject(new Error("Никнейм занят. Попробуйте другой."));
+        } else {
+           reject(err);
+        }
       });
     });
   }
@@ -49,7 +57,8 @@ class PeerService {
 
   connectToPeer(targetId: string) {
     if (!this.peer) return;
-    const conn = this.peer.connect(targetId);
+    const sanitizedTarget = targetId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const conn = this.peer.connect(sanitizedTarget);
     this.setupConnection(conn);
   }
 

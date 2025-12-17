@@ -3,54 +3,20 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { peerService } from './services/peerService.ts';
 import { Player, GameState, NetworkMessage, MessageType } from './types.ts';
 import { 
-  Users, 
-  Copy, 
-  PlusCircle, 
-  LogIn, 
-  ArrowRight, 
-  Activity, 
-  ShieldAlert,
-  Wifi,
-  Terminal,
-  MessageSquare,
-  Zap,
-  Globe
+  Search, 
+  Menu, 
+  MoreVertical, 
+  Send, 
+  Paperclip, 
+  Smile, 
+  Check, 
+  CheckCheck,
+  Search as SearchIcon,
+  User,
+  Settings,
+  Info
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
-
-// Deployment Detection Utility
-const isVercel = () => {
-  return window.location.hostname.includes('vercel.app');
-};
-
-// Components
-const Header = ({ isVercelHost }: { isVercelHost: boolean }) => (
-  <header className="py-6 px-8 flex justify-between items-center border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-    <div className="flex items-center gap-3">
-      <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center neon-glow">
-        <Wifi className="text-white w-6 h-6" />
-      </div>
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-white">Multiplayer Nexus</h1>
-        <p className="text-xs text-slate-400 font-medium">REAL-TIME CONNECTIVITY TEST</p>
-      </div>
-    </div>
-    <div className="flex items-center gap-4">
-      {isVercelHost && (
-        <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-black rounded-full border border-white/10 group cursor-help transition-all hover:border-white/30">
-          <svg width="12" height="12" viewBox="0 0 76 65" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" fill="white"/>
-          </svg>
-          <span className="text-[10px] font-bold tracking-tighter text-white">VERCEL DEPLOYED</span>
-        </div>
-      )}
-      <div className="flex items-center gap-2">
-        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-        <span className="text-xs font-mono text-slate-300 uppercase">System Ready</span>
-      </div>
-    </div>
-  </header>
-);
 
 const App: React.FC = () => {
   const [nickname, setNickname] = useState('');
@@ -60,173 +26,90 @@ const App: React.FC = () => {
     status: 'idle',
     roomId: null,
   });
-  const [joinId, setJoinId] = useState('');
-  const [logs, setLogs] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [chatMessage, setChatMessage] = useState('');
-  const [chatHistory, setChatHistory] = useState<{sender: string, text: string}[]>([]);
-  const [aiAnalysis, setAiAnalysis] = useState<string>('');
-  const [onVercel, setOnVercel] = useState(false);
-  
-  const pingTimers = useRef<Map<string, number>>(new Map());
+  const [messages, setMessages] = useState<{sender: string, text: string, time: string, isMe: boolean}[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    setOnVercel(isVercel());
-  }, []);
-
-  const addLog = (msg: string) => {
-    setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10));
-  };
-
-  const analyzeSessionWithAI = async (playersCount: number) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const envInfo = onVercel ? "deployed on Vercel edge network" : "running on local node";
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Analyze this multiplayer test session: ${playersCount} players connected. Nickname: ${nickname}. Environment: ${envInfo}. Provide a very short, cool, tech-oriented welcome or status report mentioning the deployment environment (2 sentences max).`,
-      });
-      setAiAnalysis(response.text || 'Connection optimized.');
-    } catch (e) {
-      console.error('AI error:', e);
-    }
-  };
+    scrollToBottom();
+  }, [messages]);
 
   const handleInitialize = async () => {
     if (!nickname.trim()) return;
     try {
-        const id = await peerService.init(nickname);
-        setGameState(prev => ({ 
-          ...prev, 
-          status: 'idle', 
-          roomId: id,
-          players: [{ id, nickname, isHost: true, joinedAt: Date.now() }] 
-        }));
-        setIsReady(true);
-        addLog(`Initialized as ${nickname} on ${onVercel ? 'Vercel' : 'Local Host'}`);
-    } catch (err) {
-        console.error("Initialization failed:", err);
-        addLog("Initialization error. Check console.");
+      const id = await peerService.init(nickname);
+      setGameState(prev => ({ 
+        ...prev, 
+        roomId: id,
+        players: [{ id, nickname, isHost: true, joinedAt: Date.now() }] 
+      }));
+      setIsReady(true);
+      setError('');
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
-  const handleHost = () => {
-    setGameState(prev => ({ ...prev, status: 'hosting' }));
-    addLog('Waiting for incoming connections...');
-    analyzeSessionWithAI(1);
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    const target = searchQuery.toUpperCase();
+    if (target === gameState.roomId) return;
+    peerService.connectToPeer(target);
+    setSearchQuery('');
   };
-
-  const handleJoin = () => {
-    if (!joinId.trim()) return;
-    setGameState(prev => ({ ...prev, status: 'joining' }));
-    peerService.connectToPeer(joinId);
-    addLog(`Attempting to join: ${joinId}`);
-  };
-
-  const sendPing = useCallback((targetId: string) => {
-    pingTimers.current.set(targetId, Date.now());
-    peerService.sendTo(targetId, {
-      type: 'PING',
-      payload: {},
-      senderId: peerService.getPeerId()!,
-      senderNickname: nickname
-    });
-  }, [nickname]);
 
   const handleMessage = useCallback((msg: NetworkMessage) => {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     switch (msg.type) {
       case 'CHAT':
-        setChatHistory(prev => [...prev, { sender: msg.senderNickname, text: msg.payload }]);
+        setMessages(prev => [...prev, { 
+          sender: msg.senderNickname, 
+          text: msg.payload, 
+          time, 
+          isMe: false 
+        }]);
         break;
-      
-      case 'PING':
-        peerService.sendTo(msg.senderId, {
-          type: 'PONG',
-          payload: {},
-          senderId: peerService.getPeerId()!,
-          senderNickname: nickname
-        });
-        break;
-
-      case 'PONG':
-        const startTime = pingTimers.current.get(msg.senderId);
-        if (startTime) {
-          const latency = Date.now() - startTime;
-          setGameState(prev => ({
-            ...prev,
-            players: prev.players.map(p => p.id === msg.senderId ? { ...p, latency } : p)
-          }));
-        }
-        break;
-
-      case 'SYNC_PLAYERS':
-        if (gameState.status === 'joining' || gameState.status === 'connected') {
-          setGameState(prev => ({ 
-            ...prev, 
-            players: msg.payload, 
-            status: 'connected',
-            roomId: msg.senderId
-          }));
-          addLog(`Server synchronized players list.`);
-        }
-        break;
-
       case 'PLAYER_JOINED':
         setGameState(prev => {
-          const newPlayer: Player = msg.payload;
+          const newPlayer = msg.payload;
           if (prev.players.find(p => p.id === newPlayer.id)) return prev;
-          const nextPlayers = [...prev.players, newPlayer];
-          
-          if (prev.status === 'hosting') {
-             peerService.broadcast({
-               type: 'SYNC_PLAYERS',
-               payload: nextPlayers,
-               senderId: peerService.getPeerId()!,
-               senderNickname: nickname
-             });
-             addLog(`${newPlayer.nickname} connected.`);
-             analyzeSessionWithAI(nextPlayers.length);
-          }
-          return { ...prev, players: nextPlayers };
+          return { ...prev, players: [...prev.players, newPlayer] };
         });
+        setMessages(prev => [...prev, { 
+          sender: 'System', 
+          text: `${msg.senderNickname} присоединился к сети`, 
+          time, 
+          isMe: false 
+        }]);
         break;
     }
-  }, [gameState.status, nickname, onVercel]);
+  }, []);
 
   useEffect(() => {
     if (!isReady) return;
-
     peerService.onMessage(handleMessage);
-
     peerService.onConnection((id) => {
+      setActiveChatId(id);
       peerService.sendTo(id, {
         type: 'PLAYER_JOINED',
         payload: { id: peerService.getPeerId()!, nickname, isHost: false, joinedAt: Date.now() },
         senderId: peerService.getPeerId()!,
         senderNickname: nickname
       });
-      const interval = setInterval(() => sendPing(id), 5000);
-      return () => clearInterval(interval);
     });
+  }, [isReady, handleMessage, nickname]);
 
-    peerService.onDisconnect((id) => {
-      setGameState(prev => {
-        const nextPlayers = prev.players.filter(p => p.id !== id);
-        if (prev.status === 'hosting') {
-          peerService.broadcast({
-            type: 'SYNC_PLAYERS',
-            payload: nextPlayers,
-            senderId: peerService.getPeerId()!,
-            senderNickname: nickname
-          });
-        }
-        return { ...prev, players: nextPlayers };
-      });
-      addLog(`User ${id} disconnected.`);
-    });
-  }, [isReady, handleMessage, nickname, sendPing]);
-
-  const sendChat = () => {
+  const sendMessage = () => {
     if (!chatMessage.trim()) return;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msg: NetworkMessage = {
       type: 'CHAT',
       payload: chatMessage,
@@ -234,52 +117,36 @@ const App: React.FC = () => {
       senderNickname: nickname
     };
     peerService.broadcast(msg);
-    setChatHistory(prev => [...prev, { sender: 'You', text: chatMessage }]);
+    setMessages(prev => [...prev, { sender: 'Вы', text: chatMessage, time, isMe: true }]);
     setChatMessage('');
-  };
-
-  const copyId = () => {
-    if (gameState.roomId) {
-      navigator.clipboard.writeText(gameState.roomId);
-      addLog('ID copied to clipboard');
-    }
   };
 
   if (!isReady) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-950">
-        <div className="w-full max-w-md glass p-8 rounded-3xl neon-glow border-indigo-500/20">
-          <div className="flex justify-center mb-8 relative">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center neon-glow">
-              <Users className="text-white w-8 h-8" />
+      <div className="h-screen flex items-center justify-center bg-tg-chat">
+        <div className="w-full max-w-sm p-8 bg-tg-sidebar rounded-2xl border border-tg shadow-2xl">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-20 h-20 bg-tg-active rounded-full flex items-center justify-center mb-4 shadow-lg">
+              <Send className="text-white w-10 h-10 -rotate-12 ml-1" />
             </div>
-            {onVercel && (
-               <div className="absolute -top-2 -right-2 bg-black border border-white/20 px-2 py-0.5 rounded text-[8px] font-black text-white flex items-center gap-1">
-                 <Zap className="w-2 h-2 fill-white" /> VERCEL
-               </div>
-            )}
+            <h1 className="text-2xl font-bold">Вход в Nexus</h1>
+            <p className="text-tg-gray text-sm mt-1">Используйте ваш ник как адрес</p>
           </div>
-          <h2 className="text-3xl font-bold text-center mb-2">Identify Yourself</h2>
-          <p className="text-slate-400 text-center mb-8">Enter your alias to initialize the nexus node.</p>
-          
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase mb-2 ml-1">Nickname</label>
-              <input 
-                type="text" 
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="Ex: Maverick"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                onKeyDown={(e) => e.key === 'Enter' && handleInitialize()}
-              />
-            </div>
+            <input 
+              type="text" 
+              placeholder="Ваш никнейм"
+              className="w-full bg-tg-input border border-tg rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-tg-active transition-all"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleInitialize()}
+            />
+            {error && <p className="text-red-400 text-xs text-center">{error}</p>}
             <button 
               onClick={handleInitialize}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 group"
+              className="w-full bg-tg-active hover:brightness-110 text-white font-bold py-3 rounded-xl transition-all"
             >
-              Initialize Node
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              ПРОДОЛЖИТЬ
             </button>
           </div>
         </div>
@@ -288,209 +155,129 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950">
-      <Header isVercelHost={onVercel} />
-      
-      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto w-full">
+    <div className="h-screen flex overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-[320px] bg-tg-sidebar border-r border-tg flex flex-col flex-shrink-0">
+        <div className="p-4 flex items-center gap-4">
+          <Menu className="text-tg-gray cursor-pointer" />
+          <div className="flex-1 relative">
+            <SearchIcon className="absolute left-3 top-2.5 w-4 h-4 text-tg-gray" />
+            <input 
+              type="text" 
+              placeholder="Поиск по нику..."
+              className="w-full bg-tg-input rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-tg-active"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            />
+          </div>
+        </div>
         
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="glass p-6 rounded-2xl border-slate-800">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-indigo-400" />
-                Node Status
-              </h3>
-              {onVercel ? (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/5 border border-white/10 rounded-md">
-                   <Globe className="w-3 h-3 text-indigo-300" />
-                   <span className="text-[10px] font-mono text-indigo-200">VERCEL_EDGE</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-md">
-                   <Zap className="w-3 h-3 text-slate-400" />
-                   <span className="text-[10px] font-mono text-slate-400">LOCAL_NODE</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 mb-6">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-xs text-slate-500 font-mono">NODE_ID:</span>
-                <button onClick={copyId} className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                  <Copy className="w-4 h-4" />
-                </button>
+        <div className="flex-1 overflow-y-auto">
+          {gameState.players.filter(p => p.id !== gameState.roomId).map((player) => (
+            <div 
+              key={player.id}
+              onClick={() => setActiveChatId(player.id)}
+              className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-tg-chat transition-colors ${activeChatId === player.id ? 'bg-tg-active' : ''}`}
+            >
+              <div className="w-12 h-12 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-lg">
+                {player.nickname.charAt(0).toUpperCase()}
               </div>
-              <div className="text-xl font-mono font-bold text-indigo-300 break-all leading-tight">
-                {gameState.roomId}
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-baseline">
+                  <h4 className="font-bold text-sm truncate">{player.nickname}</h4>
+                  <span className="text-[10px] text-tg-gray">Online</span>
+                </div>
+                <p className="text-xs text-tg-gray truncate">Нажмите, чтобы открыть чат</p>
               </div>
             </div>
+          ))}
+          {gameState.players.length <= 1 && (
+            <div className="p-8 text-center text-tg-gray">
+              <p className="text-sm">Никого нет онлайн.</p>
+              <p className="text-xs mt-2 italic">Введите ник друга в поиске выше</p>
+            </div>
+          )}
+        </div>
+      </div>
 
-            {gameState.status === 'idle' && (
-              <div className="space-y-4">
-                <button 
-                  onClick={handleHost}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-                >
-                  <PlusCircle className="w-5 h-5" /> Create Lobby
-                </button>
-                
-                <div className="relative py-2 flex items-center">
-                   <div className="flex-grow border-t border-slate-800"></div>
-                   <span className="flex-shrink mx-4 text-xs font-mono text-slate-600">OR</span>
-                   <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Enter Peer ID..."
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    value={joinId}
-                    onChange={(e) => setJoinId(e.target.value)}
-                  />
-                  <button 
-                    onClick={handleJoin}
-                    className="bg-slate-800 hover:bg-slate-700 px-4 py-3 rounded-xl transition-all"
-                  >
-                    <LogIn className="w-5 h-5 text-indigo-400" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {gameState.status !== 'idle' && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                  <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium text-indigo-300">
-                    {gameState.status === 'hosting' ? 'Public Lobby Active' : 'Connected to Lobby'}
-                  </span>
-                </div>
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 py-2 rounded-xl text-sm font-semibold border border-red-500/20 transition-all"
-                >
-                  Disconnect
-                </button>
-              </div>
-            )}
+      {/* Main Chat Area */}
+      <div className="flex-1 bg-tg-chat flex flex-col relative">
+        {/* Header */}
+        <div className="h-14 bg-tg-sidebar border-b border-tg flex items-center justify-between px-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-tg-active flex items-center justify-center font-bold text-sm">
+              {activeChatId ? activeChatId.charAt(0) : 'N'}
+            </div>
+            <div>
+              <h3 className="font-bold text-sm">{activeChatId || 'Общий Nexus'}</h3>
+              <p className="text-[10px] text-tg-active font-medium uppercase tracking-widest">
+                {gameState.players.length} участников
+              </p>
+            </div>
           </div>
-
-          <div className="glass p-6 rounded-2xl border-slate-800 flex-1 flex flex-col">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-indigo-400" />
-              Event Console
-            </h3>
-            <div className="flex-1 font-mono text-xs overflow-y-auto space-y-2 max-h-[300px] scrollbar-hide">
-              {logs.map((log, i) => (
-                <div key={i} className={`${i === 0 ? 'text-indigo-400 animate-pulse' : 'text-slate-500'}`}>
-                  {log}
-                </div>
-              ))}
-              {logs.length === 0 && <div className="text-slate-700 italic">No events recorded.</div>}
-            </div>
+          <div className="flex items-center gap-4 text-tg-gray">
+            <Search className="w-5 h-5 cursor-pointer" />
+            <MoreVertical className="w-5 h-5 cursor-pointer" />
           </div>
         </div>
 
-        <div className="lg:col-span-8 flex flex-col gap-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="glass p-6 rounded-2xl border-slate-800 h-full min-h-[400px] flex flex-col">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-400" />
-                  Peers ({gameState.players.length})
-                </h3>
-              </div>
-              
-              <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                {gameState.players.map((player) => (
-                  <div 
-                    key={player.id} 
-                    className={`flex items-center justify-between p-4 rounded-xl border ${player.id === peerService.getPeerId() ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-900 border-slate-800'}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-indigo-400 border border-slate-700">
-                        {player.nickname.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm">{player.nickname}</span>
-                          {player.isHost && (
-                            <span className="text-[10px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold uppercase">Host</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-mono">{player.id.substring(0, 12)}...</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-1.5 text-xs text-green-400">
-                        <Activity className="w-3 h-3" />
-                        {player.latency !== undefined ? `${player.latency}ms` : '---'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-6">
-              <div className="glass p-5 rounded-2xl border-slate-800 bg-indigo-600/5 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
-                  <Wifi className="w-12 h-12 text-indigo-400" />
-                </div>
-                <h3 className="text-xs font-bold text-indigo-400 uppercase mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping"></div>
-                  Nexus Insight (Gemini AI)
-                </h3>
-                <p className="text-sm leading-relaxed text-indigo-100 italic">
-                  {aiAnalysis || "Initializing neural analysis of network topology..."}
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+          <div className="mx-auto bg-black/30 rounded-full px-4 py-1 text-[10px] text-tg-gray uppercase font-bold tracking-tighter mb-4">
+            Ваш ID: {gameState.roomId}
+          </div>
+          
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] p-3 shadow-md relative group ${msg.isMe ? 'chat-bubble-out' : 'chat-bubble-in'}`}>
+                {!msg.isMe && msg.sender !== 'System' && (
+                  <p className="text-[10px] font-bold text-tg-active mb-1">{msg.sender}</p>
+                )}
+                <p className={`text-sm ${msg.sender === 'System' ? 'italic text-tg-gray' : ''}`}>
+                  {msg.text}
                 </p>
-              </div>
-
-              <div className="glass p-6 rounded-2xl border-slate-800 flex-1 flex flex-col min-h-[300px]">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-indigo-400" />
-                  Nexus Comms
-                </h3>
-                <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 font-mono text-xs">
-                  {chatHistory.map((chat, i) => (
-                    <div key={i} className="flex flex-col">
-                      <span className={`font-bold ${chat.sender === 'You' ? 'text-indigo-400' : 'text-amber-400'}`}>
-                        &lt;{chat.sender}&gt;
-                      </span>
-                      <span className="text-slate-300 ml-2">{chat.text}</span>
-                    </div>
-                  ))}
-                  {chatHistory.length === 0 && <div className="text-slate-700">Comms line silent...</div>}
-                </div>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={chatMessage}
-                    onChange={(e) => setChatMessage(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                    placeholder="Broadcast message..."
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                  <button 
-                    onClick={sendChat}
-                    className="bg-indigo-600 hover:bg-indigo-500 p-2 rounded-xl"
-                  >
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
+                <div className="flex items-center justify-end gap-1 mt-1">
+                  <span className="text-[10px] text-tg-gray/70">{msg.time}</span>
+                  {msg.isMe && <CheckCheck className="w-3 h-3 text-green-400" />}
                 </div>
               </div>
             </div>
-          </div>
+          ))}
+          <div ref={messagesEndRef} />
         </div>
 
-      </main>
-
-      <footer className="py-4 px-8 border-t border-slate-900 bg-slate-950 text-center">
-        <p className="text-[10px] text-slate-600 font-mono tracking-widest uppercase">
-          &copy; 2024 Multiplayer Nexus // {onVercel ? 'VERCEL EDGE PROTOCOL' : 'LOCAL HUB'} // Version 1.0.6-Alpha
-        </p>
-      </footer>
+        {/* Input */}
+        <div className="p-4 bg-tg-chat">
+          <div className="max-w-4xl mx-auto flex items-end gap-3 bg-tg-sidebar p-2 rounded-2xl shadow-xl border border-tg">
+            <div className="p-2 text-tg-gray cursor-pointer hover:text-white transition-colors">
+              <Smile className="w-6 h-6" />
+            </div>
+            <textarea 
+              rows={1}
+              placeholder="Написать сообщение..."
+              className="flex-1 bg-transparent border-none focus:outline-none py-2 text-sm resize-none scrollbar-hide max-h-32"
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+            />
+            <div className="p-2 text-tg-gray cursor-pointer hover:text-white transition-colors">
+              <Paperclip className="w-6 h-6" />
+            </div>
+            <button 
+              onClick={sendMessage}
+              className="p-2 bg-tg-active text-white rounded-full hover:brightness-110 transition-all shadow-lg"
+            >
+              <Send className="w-6 h-6 -rotate-12 ml-0.5" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
