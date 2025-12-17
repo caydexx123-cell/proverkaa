@@ -1,25 +1,19 @@
 
-export interface Player {
-  id: string;
+export interface PlayerProfile {
   nickname: string;
-  isHost: boolean;
+  avatar?: string;
   joinedAt: number;
-  latency?: number;
+  blocked?: boolean;
 }
 
-export interface GameState {
-  players: Player[];
-  status: 'idle' | 'hosting' | 'joining' | 'connected';
-  roomId: string | null;
-}
-
-export type MessageType = 'PLAYER_JOINED' | 'PLAYER_LEFT' | 'SYNC_PLAYERS' | 'CHAT' | 'IMAGE' | 'PING' | 'PONG';
+export type MessageType = 'PLAYER_JOINED' | 'PLAYER_LEFT' | 'SYNC_PROFILE' | 'CHAT' | 'IMAGE' | 'PING' | 'PONG';
 
 export interface NetworkMessage {
   type: MessageType;
   payload: any;
   senderId: string;
   senderNickname: string;
+  senderAvatar?: string;
 }
 
 export interface ChatMessage {
@@ -30,4 +24,10 @@ export interface ChatMessage {
   imageUrl?: string;
   time: string;
   isMe: boolean;
+}
+
+export interface AppSettings {
+  audioInputId?: string;
+  audioOutputId?: string;
+  videoInputId?: string;
 }

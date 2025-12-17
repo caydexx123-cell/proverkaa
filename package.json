@@ -13,7 +13,8 @@
     "react-dom": "^19.2.3",
     "@google/genai": "^1.34.0",
     "lucide-react": "^0.561.0",
-    "peerjs": "^1.5.5"
+    "peerjs": "^1.5.5",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

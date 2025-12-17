@@ -14,7 +14,13 @@ class PeerService {
     return new Promise((resolve, reject) => {
       const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       this.peer = new Peer(sanitizedId, {
-        debug: 1
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
       });
 
       this.peer.on('open', (id) => resolve(id));
@@ -46,17 +52,17 @@ class PeerService {
   connectToPeer(targetId: string) {
     if (!this.peer) return;
     const sanitizedTarget = targetId.toUpperCase();
-    const conn = this.peer.connect(sanitizedTarget);
+    const conn = this.peer.connect(sanitizedTarget, {
+      reliable: true
+    });
     this.setupConnection(conn);
   }
 
   callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
     if (!this.peer) return null;
-    return this.peer.call(targetId.toUpperCase(), stream);
-  }
-
-  broadcast(message: NetworkMessage) {
-    this.connections.forEach(conn => conn.open && conn.send(message));
+    return this.peer.call(targetId.toUpperCase(), stream, {
+      metadata: { nickname: localStorage.getItem('nexus_nick') }
+    });
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
