@@ -1,40 +1,30 @@
 
-import Peer, { DataConnection } from 'peerjs';
-import { NetworkMessage } from '../types';
+import Peer, { DataConnection, MediaConnection } from 'peerjs';
+import { NetworkMessage } from '../types.ts';
 
 class PeerService {
-  private peer: Peer | null = null;
+  public peer: Peer | null = null;
   private connections: Map<string, DataConnection> = new Map();
   private onMessageCallback: ((msg: NetworkMessage) => void) | null = null;
   private onConnectionCallback: ((id: string) => void) | null = null;
   private onDisconnectCallback: ((id: string) => void) | null = null;
+  private onCallCallback: ((call: MediaConnection) => void) | null = null;
 
   async init(nickname: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      // Испольуем никнейм как ID (очищаем от спецсимволов и переводим в верхний регистр)
       const sanitizedId = nickname.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      this.peer = new Peer(sanitizedId);
-
-      this.peer.on('open', (id) => {
-        console.log('Peer ID initialized:', id);
-        resolve(id);
+      this.peer = new Peer(sanitizedId, {
+        debug: 1
       });
 
-      this.peer.on('connection', (conn) => {
-        this.setupConnection(conn);
+      this.peer.on('open', (id) => resolve(id));
+      this.peer.on('connection', (conn) => this.setupConnection(conn));
+      this.peer.on('call', (call) => {
+        if (this.onCallCallback) this.onCallCallback(call);
       });
-
       this.peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        // Если ID занят, добавляем рандом
-        if (err.type === 'unavailable-id') {
-           const randomId = sanitizedId + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
-           this.peer = new Peer(randomId);
-           // Рекурсивно не будем, просто попробуем еще раз с новым ID
-           reject(new Error("Никнейм занят. Попробуйте другой."));
-        } else {
-           reject(err);
-        }
+        if (err.type === 'unavailable-id') reject(new Error("Ник занят"));
+        else reject(err);
       });
     });
   }
@@ -44,11 +34,9 @@ class PeerService {
       this.connections.set(conn.peer, conn);
       if (this.onConnectionCallback) this.onConnectionCallback(conn.peer);
     });
-
     conn.on('data', (data: any) => {
       if (this.onMessageCallback) this.onMessageCallback(data as NetworkMessage);
     });
-
     conn.on('close', () => {
       this.connections.delete(conn.peer);
       if (this.onDisconnectCallback) this.onDisconnectCallback(conn.peer);
@@ -57,46 +45,31 @@ class PeerService {
 
   connectToPeer(targetId: string) {
     if (!this.peer) return;
-    const sanitizedTarget = targetId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const sanitizedTarget = targetId.toUpperCase();
     const conn = this.peer.connect(sanitizedTarget);
     this.setupConnection(conn);
   }
 
+  callPeer(targetId: string, stream: MediaStream): MediaConnection | null {
+    if (!this.peer) return null;
+    return this.peer.call(targetId.toUpperCase(), stream);
+  }
+
   broadcast(message: NetworkMessage) {
-    this.connections.forEach((conn) => {
-      if (conn.open) {
-        conn.send(message);
-      }
-    });
+    this.connections.forEach(conn => conn.open && conn.send(message));
   }
 
   sendTo(targetId: string, message: NetworkMessage) {
-    const conn = this.connections.get(targetId);
-    if (conn && conn.open) {
-      conn.send(message);
-    }
+    const conn = this.connections.get(targetId.toUpperCase());
+    if (conn && conn.open) conn.send(message);
   }
 
-  onMessage(callback: (msg: NetworkMessage) => void) {
-    this.onMessageCallback = callback;
-  }
+  onMessage(cb: (msg: NetworkMessage) => void) { this.onMessageCallback = cb; }
+  onConnection(cb: (id: string) => void) { this.onConnectionCallback = cb; }
+  onDisconnect(cb: (id: string) => void) { this.onDisconnectCallback = cb; }
+  onCall(cb: (call: MediaConnection) => void) { this.onCallCallback = cb; }
 
-  onConnection(callback: (id: string) => void) {
-    this.onConnectionCallback = callback;
-  }
-
-  onDisconnect(callback: (id: string) => void) {
-    this.onDisconnectCallback = callback;
-  }
-
-  destroy() {
-    this.connections.forEach(c => c.close());
-    this.peer?.destroy();
-  }
-
-  getPeerId() {
-    return this.peer?.id || null;
-  }
+  getPeerId() { return this.peer?.id || null; }
 }
 
 export const peerService = new PeerService();

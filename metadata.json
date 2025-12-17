@@ -1,8 +1,8 @@
 {
-  "name": "Multiplayer Nexus",
-  "description": "A high-performance P2P multiplayer testing platform. Users can create or join servers using unique IDs, manage nicknames, and verify connectivity with real-time player lists and latency tracking.",
   "requestFramePermissions": [
     "camera",
     "microphone"
-  ]
+  ],
+  "name": "",
+  "description": ""
 }

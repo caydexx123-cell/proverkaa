@@ -1,41 +1,65 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Nexus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus Messenger</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --tg-bg: #0e1621;
+            --tg-sidebar: #17212b;
+            --tg-input: #242f3d;
+            --tg-active: #2b5278;
+            --tg-text: #ffffff;
+            --tg-gray: #708499;
+            --accent: #2b5278;
+        }
+        
+        body.light-theme {
+            --tg-bg: #ffffff;
+            --tg-sidebar: #f4f4f4;
+            --tg-input: #ffffff;
+            --tg-active: #40a7e3;
+            --tg-text: #000000;
+            --tg-gray: #8e8e8e;
+            --accent: #40a7e3;
+        }
+
         body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #0e1621;
-            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--tg-bg);
+            color: var(--tg-text);
             margin: 0;
             height: 100vh;
             overflow: hidden;
+            transition: background-color 0.3s ease;
         }
-        .bg-tg-sidebar { background-color: #17212b; }
-        .bg-tg-chat { background-color: #0e1621; }
-        .bg-tg-active { background-color: #2b5278; }
-        .bg-tg-input { background-color: #242f3d; }
-        .text-tg-gray { color: #708499; }
-        .border-tg { border-color: #101921; }
         
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #242f3d; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #2b5278; }
+        .chat-container { height: 100vh; height: -webkit-fill-available; }
+        
+        .bg-tg-sidebar { background-color: var(--tg-sidebar); }
+        .bg-tg-chat { background-color: var(--tg-bg); }
+        .bg-tg-active { background-color: var(--tg-active); }
+        .bg-tg-input { background-color: var(--tg-input); }
+        .text-tg-gray { color: var(--tg-gray); }
         
         .chat-bubble-in {
             background-color: #182533;
-            border-radius: 10px 10px 10px 0;
+            border-radius: 12px 12px 12px 2px;
         }
+        .light-theme .chat-bubble-in {
+            background-color: #eff2f5;
+        }
+        
         .chat-bubble-out {
-            background-color: #2b5278;
-            border-radius: 10px 10px 0 10px;
+            background-color: var(--tg-active);
+            border-radius: 12px 12px 2px 12px;
         }
+        
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 <script type="importmap">
 {
@@ -50,7 +74,7 @@
 }
 </script>
 </head>
-<body>
+<body class="dark-theme">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
 </body>

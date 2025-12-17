@@ -13,11 +13,21 @@ export interface GameState {
   roomId: string | null;
 }
 
-export type MessageType = 'PLAYER_JOINED' | 'PLAYER_LEFT' | 'SYNC_PLAYERS' | 'CHAT' | 'PING' | 'PONG';
+export type MessageType = 'PLAYER_JOINED' | 'PLAYER_LEFT' | 'SYNC_PLAYERS' | 'CHAT' | 'IMAGE' | 'PING' | 'PONG';
 
 export interface NetworkMessage {
   type: MessageType;
   payload: any;
   senderId: string;
   senderNickname: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text?: string;
+  imageUrl?: string;
+  time: string;
+  isMe: boolean;
 }
